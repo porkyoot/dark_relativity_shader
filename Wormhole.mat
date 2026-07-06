@@ -11,8 +11,7 @@ Material:
   m_Shader: {fileID: 4800000, guid: bd8c780006cc0971ca543cd7d2281632, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
-  m_ValidKeywords:
-  - USE_MANUAL_PROBE
+  m_ValidKeywords: []
   m_InvalidKeywords: []
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
@@ -42,6 +41,10 @@ Material:
         m_Offset: {x: 0, y: 0}
     - _EmissionMap:
         m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _GeodesicLUT:
+        m_Texture: {fileID: 2800000, guid: 85c66c4870f176134a03d55b46cbd165, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _MainTex:
@@ -83,6 +86,7 @@ Material:
     - _HorizonLensingLimit: 0.85
     - _InnerCurvePower: 2.59
     - _InnerRefraction: 0.24
+    - _LUTMaxDistance: 10
     - _MaxDeflectionAngle: 3.77
     - _MaxRings: 4
     - _Metallic: 0
@@ -99,7 +103,8 @@ Material:
     - _ThroatRadius: 0.171
     - _TimeDilationShift: 1
     - _UVSec: 0
-    - _UseManualProbe: 1
+    - _UseGeodesicLUT: 0
+    - _UseManualProbe: 0
     - _ZWrite: 1
     m_Colors:
     - _Color: {r: 1, g: 1, b: 1, a: 1}

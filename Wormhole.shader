@@ -17,6 +17,11 @@ Shader "DarkRelativity/Wormhole"
         _TimeDilationShift("Time Dilation Shift (Doppler)", Range(-5.0, 5.0)) = 0.0
         _EdgeBlendWidth("Edge Blend Width", Range(0.001, 0.2)) = 0.05
         
+        [Header(Geodesic Baking)]
+        [Toggle(USE_GEODESIC_LUT)] _UseGeodesicLUT("Use Geodesic LUT", Float) = 0
+        [NoScaleOffset] _GeodesicLUT("Geodesic LUT (Baked)", 2D) = "black" {}
+        _LUTMaxDistance("LUT Max Distance (Must match baker)", Float) = 10.0
+        
         [Header(Advanced Calibration Settings)]
         _MaxRings("Max Light Repeats (Rings)", Range(0.0, 20.0)) = 3.0
         _ScreenBorderBlendWidth("Screen Border Blend Width", Range(0.01, 0.5)) = 0.15
@@ -53,6 +58,7 @@ Shader "DarkRelativity/Wormhole"
             #pragma fragment frag
             #pragma multi_compile_fwdbase
             #pragma shader_feature USE_MANUAL_PROBE
+            #pragma shader_feature USE_GEODESIC_LUT
             
             #include "UnityCG.cginc"
             
@@ -80,6 +86,9 @@ Shader "DarkRelativity/Wormhole"
             samplerCUBE _WormholeSkybox;
             half4 _WormholeSkybox_HDR;
             samplerCUBE _ManualEnvironmentMap;
+            sampler2D _GeodesicLUT;
+            
+            float _LUTMaxDistance;
             
             float _ThroatRadius;
             float _DistortionStrength;
@@ -215,6 +224,66 @@ Shader "DarkRelativity/Wormhole"
                 float perpLen = length(perpVec);
                 float3 perpendicular = (perpLen > 1e-5) ? (perpVec / perpLen) : float3(0.0, 0.0, 0.0);
                 
+                half3 col_Outside = half3(0,0,0);
+                half3 col_Inside = half3(0,0,0);
+                
+                #ifdef USE_GEODESIC_LUT
+                
+                    // -- HIGH PRECISION GEODESIC LUT PATH --
+                    float u = saturate((distToCenter - worldRs) / max(_LUTMaxDistance - worldRs, 0.0001));
+                    float v = saturate(theta / 3.1415926535);
+                    
+                    half4 texData = tex2Dlod(_GeodesicLUT, float4(u, v, 0, 0));
+                    float totalPhi = texData.r;
+                    float universeId = texData.g;
+                    
+                    if (universeId < -0.5) 
+                    {
+                        // Event Horizon (Schwarzschild)
+                        finalColor = half4(0,0,0,edgeFade);
+                        return finalColor;
+                    }
+                    else if (universeId < 0.5)
+                    {
+                        // Bounced or Escaped to Universe A (Current Universe)
+                        float theta_Lensed = 3.1415926535 - totalPhi;
+                        float3 ray_Lensed = singularityDir * cos(theta_Lensed) + perpendicular * sin(theta_Lensed);
+                        
+                        float3 proj_Lensed = eyePos + ray_Lensed * distToCenter;
+                        float4 clip_Lensed = UnityWorldToClipPos(proj_Lensed);
+                        float2 uv_Lensed = ComputeGrabScreenPos(clip_Lensed).xy / max(clip_Lensed.w, 0.0001);
+                        
+                        float blendW = max(_ScreenBorderBlendWidth, 0.02);
+                        bool inBounds = all(uv_Lensed > 0.0) && all(uv_Lensed < 1.0) && (clip_Lensed.w > 0.0);
+                        float2 distToEdge = min(uv_Lensed, 1.0 - uv_Lensed);
+                        float edgeDist = min(distToEdge.x, distToEdge.y);
+                        float blend = inBounds ? smoothstep(0.0, blendW, edgeDist) : 0.0;
+                        
+                        half3 grabCol = UNITY_SAMPLE_SCREENSPACE_TEXTURE(_DarkRelativityGrab, uv_Lensed).rgb;
+                        
+                        half3 probeCol;
+#ifdef USE_MANUAL_PROBE
+                        probeCol = texCUBElod(_ManualEnvironmentMap, float4(ray_Lensed, 0.0)).rgb;
+#else
+                        half4 probeColRaw = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_Lensed, 0.0);
+                        probeCol = DecodeHDR(probeColRaw, unity_SpecCube0_HDR);
+#endif
+                        col_Outside = lerp(probeCol, grabCol, blend);
+                    }
+                    else
+                    {
+                        // Crossed Throat to Universe B (Other Universe)
+                        float theta_Lensed = totalPhi;
+                        float3 ray_Lensed = singularityDir * cos(theta_Lensed) + perpendicular * sin(theta_Lensed);
+                        
+                        half4 skyColor = texCUBElod(_WormholeSkybox, float4(ray_Lensed, 0.0));
+                        col_Inside = DecodeHDR(skyColor, _WormholeSkybox_HDR) * _SkyboxBrightness;
+                    }
+                    
+                #else
+                
+                // -- ANALYTIC APPROXIMATION PATH --
+                
                 // Calculate INSIDE Wormhole color
                 float normalizedTheta = theta / max(theta_H, 0.0001);
                 
@@ -233,7 +302,7 @@ Shader "DarkRelativity/Wormhole"
                 float3 ray_Wormhole = singularityDir * cos(theta_out) + perpendicular * sin(theta_out);
                 
                 half4 skyColor = texCUBElod(_WormholeSkybox, float4(ray_Wormhole, 0.0));
-                half3 col_Inside = DecodeHDR(skyColor, _WormholeSkybox_HDR) * _SkyboxBrightness;
+                col_Inside = DecodeHDR(skyColor, _WormholeSkybox_HDR) * _SkyboxBrightness;
                 
                 // Calculate OUTSIDE Lensing color
                 float fade = 1.0;
@@ -256,11 +325,9 @@ Shader "DarkRelativity/Wormhole"
                 float theta_Lensed = theta - theta_H * distFactor;
                 float3 ray_Lensed = singularityDir * cos(theta_Lensed) + perpendicular * sin(theta_Lensed);
                 
-                half3 col_Outside;
                 if (distToCenter < worldRs)
                 {
                     // Camera is inside the throat looking backward. 
-                    // To make teleportation seamless, looking backward from inside must show the universe we came from (Universe A).
 #ifdef USE_MANUAL_PROBE
                     col_Outside = texCUBElod(_ManualEnvironmentMap, float4(ray_Lensed, 0.0)).rgb;
 #else
@@ -293,6 +360,8 @@ Shader "DarkRelativity/Wormhole"
                     col_Outside = lerp(probeCol, grabCol, blend);
                 }
                 
+                #endif // End of Analytic Path
+                
                 // Smooth threshold blend between Inside and Outside
                 float insideFactor = 1.0 - smoothstep(theta_H - _EdgeBlendWidth, theta_H + _EdgeBlendWidth, theta);
                 finalColor.rgb = lerp(col_Outside, col_Inside, insideFactor);
@@ -311,6 +380,6 @@ Shader "DarkRelativity/Wormhole"
             ENDCG
         }
     }
-    
+    CustomEditor "DarkRelativity.WormholeShaderGUI"
     Fallback "Transparent/Diffuse"
 }
