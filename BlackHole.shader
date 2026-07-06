@@ -258,12 +258,12 @@ Shader "DarkRelativity/BlackHole"
                     
                     if (!occludedByScene)
                     {
-                        float fringeIn = cosTheta_H;
-                        float fringeOut = cosTheta_H * (1.0 - _FringeWidth);
+                        float fringeInTheta = theta_H;
+                        float fringeOutTheta = theta_H * (1.0 + _FringeWidth);
                         
-                        if (_FringeWidth > 0.0 && cosTheta > fringeOut)
+                        if (_FringeWidth > 0.0 && theta < fringeOutTheta)
                         {
-                            float fringeFactor = smoothstep(fringeOut, fringeIn, cosTheta) * edgeFade;
+                            float fringeFactor = smoothstep(fringeOutTheta, fringeInTheta, theta) * edgeFade;
                             float3 fringeColor = GetFringeColor(doppler);
                             float beaming = pow(max(doppler, 0.0001), 3.0);
                             float3 fringeGlow = fringeColor * fringeFactor * _FringeStrength * beaming;
