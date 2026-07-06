@@ -18,6 +18,10 @@ struct v2f
     float3 normalWorld : TEXCOORD3;
     float4 screenCenter : TEXCOORD4;
     float3 localPos : TEXCOORD6;
+    float distToCenter : TEXCOORD7;
+    float worldRs : TEXCOORD8;
+    float cosTheta_H : TEXCOORD9;
+    float theta_H : COLOR0;
     UNITY_VERTEX_INPUT_INSTANCE_ID
     UNITY_VERTEX_OUTPUT_STEREO
 };
@@ -63,6 +67,44 @@ inline v2f vert_common(appdata v)
     float3 centerWorld = unity_ObjectToWorld._m03_m13_m23;
     o.screenCenter = ComputeGrabScreenPos(UnityWorldToClipPos(centerWorld));
     o.localPos = v.vertex.xyz;
+    
+    float3 eyePos = GetEyePos();
+    float distToCenter = distance(eyePos, centerWorld);
+    float meshRadius = GetMeshRadius();
+    float worldRs = meshRadius * saturate(_RealRadius / 0.5);
+    
+    float cosTheta_H = 0.0;
+    
+    #if defined(_ANALYTICMETRIC_BLACKHOLE)
+        if (distToCenter >= worldRs * 1.5)
+        {
+            float sinTheta_H = (2.598076 * worldRs) / (distToCenter * sqrt(max(0.0001, 1.0 - worldRs / distToCenter)));
+            cosTheta_H = sqrt(max(0.0, 1.0 - saturate(sinTheta_H * sinTheta_H)));
+        }
+        else
+        {
+            // Smoothly expand the shadow to cover the entire sky (cosTheta_H -> -1.0) as we fall to the center
+            cosTheta_H = (distToCenter / max(worldRs * 1.5, 0.0001)) - 1.0;
+        }
+    #else
+        // Ellis Wormhole throat size (no spatial curvature magnification)
+        if (distToCenter >= worldRs)
+        {
+            float sinTheta_H = worldRs / max(distToCenter, 0.0001);
+            cosTheta_H = sqrt(max(0.0, 1.0 - sinTheta_H * sinTheta_H));
+        }
+        else
+        {
+            cosTheta_H = 0.0; // Throat covers entire forward view when inside
+        }
+    #endif
+    
+    float theta_H = acos(clamp(cosTheta_H, -1.0, 1.0));
+    
+    o.distToCenter = distToCenter;
+    o.worldRs = worldRs;
+    o.cosTheta_H = cosTheta_H;
+    o.theta_H = theta_H;
     
     return o;
 }

@@ -206,6 +206,7 @@ namespace DarkRelativity
             if (GUILayout.Button("Bake and Assign LUT", GUILayout.Height(30)))
             {
                 BakeLUT(targetMat, metric, resolution, maxDistance, throatRadius, maxSteps, stepSize);
+                GUIUtility.ExitGUI();
             }
             EditorGUILayout.EndVertical();
         }
@@ -228,7 +229,8 @@ namespace DarkRelativity
                 for (int x = 0; x < resolution; x++)
                 {
                     float u = (float)x / (resolution - 1);
-                    float r_initial = Mathf.Lerp(throatRadius * 1.001f, maxDistance, u);
+                    float u_sq = u * u; // Allocate more resolution to the volatile area near the horizon
+                    float r_initial = Mathf.Lerp(throatRadius * 1.001f, maxDistance, u_sq);
 
                     Vector2 result;
                     if (metric == MetricType.BlackHole_Schwarzschild)

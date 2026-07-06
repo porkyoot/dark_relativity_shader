@@ -117,7 +117,7 @@ Shader "DarkRelativity/Singularity"
                 float3 center = unity_ObjectToWorld._m03_m13_m23;
                 float3 normalWorld = normalize(i.normalWorld);
                 float3 rayDir = normalize(i.worldPos - eyePos);
-                float distToCenter = distance(eyePos, center);
+                float distToCenter = i.distToCenter;
                 float meshRadius = GetMeshRadius();
                 
                 if (distToCenter > meshRadius && dot(normalWorld, rayDir) > 0.0)
@@ -127,15 +127,14 @@ Shader "DarkRelativity/Singularity"
                 
                 float3 localY = normalize(float3(unity_ObjectToWorld._m01, unity_ObjectToWorld._m11, unity_ObjectToWorld._m21));
                 float spinAlignment = dot(rayDir, localY);
-                float squeeze = 1.0 - (spinAlignment * spinAlignment) * abs(_RotationVelocity) * 0.5;
                 
-                // Scale worldRs by squeeze value only for Black Hole metric (both analytic and LUT paths)
-                float worldRs = meshRadius * saturate(_RealRadius / 0.5);
+                float squeezeVal = 1.0;
                 #if defined(_ANALYTICMETRIC_BLACKHOLE)
                     float squeezeFactor = saturate(abs(_RotationVelocity) / max(_SpeedOfLight, 0.001));
-                    float squeezeVal = 1.0 - (spinAlignment * spinAlignment) * squeezeFactor * 0.4;
-                    worldRs *= squeezeVal;
+                    squeezeVal = 1.0 - (spinAlignment * spinAlignment) * squeezeFactor * 0.4;
                 #endif
+                
+                float worldRs = i.worldRs * squeezeVal;
                 
                 float aspect = UNITY_MATRIX_P[1][1] / UNITY_MATRIX_P[0][0];
                 float2 aspectCorrect = float2(aspect, 1.0);
@@ -154,34 +153,10 @@ Shader "DarkRelativity/Singularity"
                 float3 singularityDir = normalize(center - eyePos);
                 float cosTheta = dot(rayDir, singularityDir); 
                 
-                float cosTheta_H;
-                #if defined(_ANALYTICMETRIC_BLACKHOLE)
-                    // Schwarzschild lensed shadow size (3*sqrt(3)/2 = 2.598076 multiplier)
-                    if (distToCenter >= worldRs * 1.5)
-                    {
-                        float sinTheta_H = (2.598076 * worldRs) / (distToCenter * sqrt(max(0.0001, 1.0 - worldRs / distToCenter)));
-                        cosTheta_H = sqrt(max(0.0, 1.0 - saturate(sinTheta_H * sinTheta_H)));
-                    }
-                    else
-                    {
-                        // Smoothly expand the shadow to cover the entire sky (cosTheta_H -> -1.0) as we fall to the center
-                        cosTheta_H = (distToCenter / max(worldRs * 1.5, 0.0001)) - 1.0;
-                    }
-                #else
-                    // Ellis Wormhole throat size (no spatial curvature magnification)
-                    if (distToCenter >= worldRs)
-                    {
-                        float sinTheta_H = worldRs / max(distToCenter, 0.0001);
-                        cosTheta_H = sqrt(max(0.0, 1.0 - sinTheta_H * sinTheta_H));
-                    }
-                    else
-                    {
-                        cosTheta_H = - (1.0 - distToCenter / max(worldRs, 0.0001));
-                    }
-                #endif
+                float theta_H = i.theta_H * squeezeVal;
+                float cosTheta_H = cos(theta_H);
                 
                 float theta = acos(clamp(cosTheta, -1.0, 1.0));
-                float theta_H = acos(clamp(cosTheta_H, -1.0, 1.0));
                 
                 // Calculate physical, world-space relative fringe size to keep it independent of camera distance
                 float fringeOutTheta = theta_H;
@@ -211,7 +186,8 @@ Shader "DarkRelativity/Singularity"
                 #ifdef USE_GEODESIC_LUT
                 
                     bool useLut = (distToCenter >= worldRs);
-                    float u = saturate((distToCenter / max(worldRs, 0.0001) - 1.0) / max(_LUTMaxDistance - 1.0, 0.0001));
+                    float r_norm = (distToCenter / max(worldRs, 0.0001) - 1.0) / max(_LUTMaxDistance - 1.0, 0.0001);
+                    float u = sqrt(saturate(r_norm));
                     float v = saturate(theta / 3.1415926535);
                     
                     half4 texData = tex2Dlod(_GeodesicLUT, float4(u, v, 0, 0));
