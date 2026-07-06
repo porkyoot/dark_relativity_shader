@@ -8,7 +8,6 @@ Shader "DarkRelativity/BlackHole"
         [Header(Fast Lensing Settings)]
         _DistortionStrength("Lensing Strength", Range(0.1, 15.0)) = 1.0
         _DistortionPower("Lensing Falloff (Fast)", Range(0.5, 3.0)) = 1.2
-        _ChromaticAberration("Chromatic Aberration", Range(0.0, 0.3)) = 0.05
         
         [Header(Relativistic Physics Settings)]
         _SpeedOfLight("Speed of Light (c)", Float) = 100.0
@@ -189,68 +188,34 @@ Shader "DarkRelativity/BlackHole"
                     
                     distFactor = min(distFactor, _MaxDeflectionAngle / max(theta_H, 0.0001));
                     
-                    float theta_R = theta - theta_H * distFactor * (1.0 + _ChromaticAberration * 0.5);
-                    float theta_G = theta - theta_H * distFactor;
-                    float theta_B = theta - theta_H * distFactor * (1.0 - _ChromaticAberration * 0.5);
-                    
-                    float3 ray_R = singularityDir * cos(theta_R) + perpendicular * sin(theta_R);
-                    float3 ray_G = singularityDir * cos(theta_G) + perpendicular * sin(theta_G);
-                    float3 ray_B = singularityDir * cos(theta_B) + perpendicular * sin(theta_B);
+                    float theta_Lensed = theta - theta_H * distFactor;
+                    float3 ray_Lensed = singularityDir * cos(theta_Lensed) + perpendicular * sin(theta_Lensed);
                     
                     half3 col;
                     
                     if (distToCenter < worldRs)
                     {
-                        half4 probeColor_R = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_R, 0.0);
-                        half4 probeColor_G = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_G, 0.0);
-                        half4 probeColor_B = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_B, 0.0);
-                        
-                        col.r = DecodeHDR(probeColor_R, unity_SpecCube0_HDR).r;
-                        col.g = DecodeHDR(probeColor_G, unity_SpecCube0_HDR).g;
-                        col.b = DecodeHDR(probeColor_B, unity_SpecCube0_HDR).b;
-                        
+                        half4 probeColor = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_Lensed, 0.0);
+                        col = DecodeHDR(probeColor, unity_SpecCube0_HDR);
                         col = ApplyBackgroundDoppler(col, doppler);
                     }
                     else
                     {
-                        float3 proj_R = eyePos + (occludedByScene ? rayDir : ray_R) * distToCenter;
-                        float3 proj_G = eyePos + (occludedByScene ? rayDir : ray_G) * distToCenter;
-                        float3 proj_B = eyePos + (occludedByScene ? rayDir : ray_B) * distToCenter;
-                        
-                        float4 clip_R = UnityWorldToClipPos(proj_R);
-                        float4 clip_G = UnityWorldToClipPos(proj_G);
-                        float4 clip_B = UnityWorldToClipPos(proj_B);
-                        
-                        float2 uv_R = ComputeGrabScreenPos(clip_R).xy / max(clip_R.w, 0.0001);
-                        float2 uv_G = ComputeGrabScreenPos(clip_G).xy / max(clip_G.w, 0.0001);
-                        float2 uv_B = ComputeGrabScreenPos(clip_B).xy / max(clip_B.w, 0.0001);
+                        float3 proj_Lensed = eyePos + (occludedByScene ? rayDir : ray_Lensed) * distToCenter;
+                        float4 clip_Lensed = UnityWorldToClipPos(proj_Lensed);
+                        float2 uv_Lensed = ComputeGrabScreenPos(clip_Lensed).xy / max(clip_Lensed.w, 0.0001);
                         
                         float blendW = max(_ScreenBorderBlendWidth, 0.02);
                         
-                        bool inBounds_R = all(uv_R > 0.0) && all(uv_R < 1.0) && (clip_R.w > 0.0);
-                        float2 distToEdge_R = min(uv_R, 1.0 - uv_R);
-                        float edgeDist_R = min(distToEdge_R.x, distToEdge_R.y);
-                        float blend_R = inBounds_R ? smoothstep(0.0, blendW, edgeDist_R) : 0.0;
-                        half3 grabCol_R = UNITY_SAMPLE_SCREENSPACE_TEXTURE(_GrabTexture, uv_R).rgb;
-                        half3 probeCol_R = DecodeHDR(UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_R, 0.0), unity_SpecCube0_HDR);
-                        col.r = lerp(probeCol_R.r, grabCol_R.r, blend_R);
+                        bool inBounds = all(uv_Lensed > 0.0) && all(uv_Lensed < 1.0) && (clip_Lensed.w > 0.0);
+                        float2 distToEdge = min(uv_Lensed, 1.0 - uv_Lensed);
+                        float edgeDist = min(distToEdge.x, distToEdge.y);
+                        float blend = inBounds ? smoothstep(0.0, blendW, edgeDist) : 0.0;
                         
-                        bool inBounds_G = all(uv_G > 0.0) && all(uv_G < 1.0) && (clip_G.w > 0.0);
-                        float2 distToEdge_G = min(uv_G, 1.0 - uv_G);
-                        float edgeDist_G = min(distToEdge_G.x, distToEdge_G.y);
-                        float blend_G = inBounds_G ? smoothstep(0.0, blendW, edgeDist_G) : 0.0;
-                        half3 grabCol_G = UNITY_SAMPLE_SCREENSPACE_TEXTURE(_GrabTexture, uv_G).rgb;
-                        half3 probeCol_G = DecodeHDR(UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_G, 0.0), unity_SpecCube0_HDR);
-                        col.g = lerp(probeCol_G.g, grabCol_G.g, blend_G);
+                        half3 grabCol = UNITY_SAMPLE_SCREENSPACE_TEXTURE(_GrabTexture, uv_Lensed).rgb;
+                        half3 probeCol = DecodeHDR(UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_Lensed, 0.0), unity_SpecCube0_HDR);
                         
-                        bool inBounds_B = all(uv_B > 0.0) && all(uv_B < 1.0) && (clip_B.w > 0.0);
-                        float2 distToEdge_B = min(uv_B, 1.0 - uv_B);
-                        float edgeDist_B = min(distToEdge_B.x, distToEdge_B.y);
-                        float blend_B = inBounds_B ? smoothstep(0.0, blendW, edgeDist_B) : 0.0;
-                        half3 grabCol_B = UNITY_SAMPLE_SCREENSPACE_TEXTURE(_GrabTexture, uv_B).rgb;
-                        half3 probeCol_B = DecodeHDR(UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_B, 0.0), unity_SpecCube0_HDR);
-                        col.b = lerp(probeCol_B.b, grabCol_B.b, blend_B);
-                        
+                        col = lerp(probeCol, grabCol, blend);
                         col = ApplyBackgroundDoppler(col, doppler);
                     }
                     

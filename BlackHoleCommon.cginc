@@ -26,7 +26,6 @@ struct v2f
 float _RealRadius;
 float _DistortionStrength;
 float _DistortionPower;
-float _ChromaticAberration;
 float _SpeedOfLight;
 float _RotationVelocity;
 float _BaseTemperature;
