@@ -39,6 +39,11 @@ Shader "DarkRelativity/Singularity"
         [Toggle(USE_MANUAL_PROBE)] _UseManualProbe("Use Manual Environment Map", Float) = 0
         [NoScaleOffset] _ManualEnvironmentMap("Manual Environment Map", Cube) = "black" {}
         
+        // === OTHER SINGULARITY INTERACTION ===
+        _OtherSingularityPos("Other Singularity Position", Vector) = (0,0,0,0)
+        _OtherSingularityRadius("Other Singularity Radius", Float) = 0.0
+        [KeywordEnum(None, BlackHole, Wormhole)] _OtherSingularityType("Other Singularity Type", Float) = 0
+        
         // === BAKER PERSISTENCE (hidden, set by ShaderGUI) ===
         [HideInInspector] _BakerResolution("Baker Resolution", Float) = 512
         [HideInInspector] _BakerMaxSteps("Baker Max Steps", Float) = 10000
@@ -86,6 +91,10 @@ Shader "DarkRelativity/Singularity"
             sampler2D _GeodesicLUT;
             
             float _LUTMaxDistance;
+            
+            float4 _OtherSingularityPos;
+            float _OtherSingularityRadius;
+            float _OtherSingularityType;
             
             float _SkyboxBrightness;
             float _InnerRefraction;
@@ -256,7 +265,7 @@ Shader "DarkRelativity/Singularity"
                         bool inBounds = all(uv_Lensed > 0.0) && all(uv_Lensed < 1.0) && (clip_Lensed.w > 0.0);
                         float2 distToEdge = min(uv_Lensed, 1.0 - uv_Lensed);
                         float edgeDist = min(distToEdge.x, distToEdge.y);
-                        float blend = inBounds ? smoothstep(0.0, blendW, edgeDist) : 0.0;
+                        float blend = (distToCenter <= meshRadius) ? 0.0 : (inBounds ? smoothstep(0.0, blendW, edgeDist) : 0.0);
                         
                         half3 grabCol = UNITY_SAMPLE_SCREENSPACE_TEXTURE(_DarkRelativityGrab, uv_Lensed).rgb;
                         
@@ -268,6 +277,8 @@ Shader "DarkRelativity/Singularity"
                         probeCol = DecodeHDR(probeColRaw, unity_SpecCube0_HDR);
 #endif
                         col_Outside = lerp(probeCol, grabCol, blend);
+                        
+                        col_Outside = CheckOtherSingularity(col_Outside, eyePos, ray_Lensed, _OtherSingularityPos, _OtherSingularityRadius, _OtherSingularityType, _WormholeSkybox, _WormholeSkybox_HDR, _SkyboxBrightness);
                         
                         // Rotational Doppler
                         doppler = GetUnifiedDoppler(rayDir, singularityDir, perpendicular, distToCenter, worldRs);
@@ -328,7 +339,7 @@ Shader "DarkRelativity/Singularity"
                         float theta_Lensed = theta - theta_H * distFactor;
                         float3 ray_Lensed = singularityDir * cos(theta_Lensed) + perpendicular * sin(theta_Lensed);
                         
-                        if (distToCenter < worldRs)
+                        if (distToCenter <= meshRadius)
                         {
                             half4 probeColor = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_Lensed, 0.0);
                             col_Outside = DecodeHDR(probeColor, unity_SpecCube0_HDR);
@@ -350,6 +361,8 @@ Shader "DarkRelativity/Singularity"
                             
                             col_Outside = lerp(probeCol, grabCol, blend);
                         }
+                        
+                        col_Outside = CheckOtherSingularity(col_Outside, eyePos, ray_Lensed, _OtherSingularityPos, _OtherSingularityRadius, _OtherSingularityType, _WormholeSkybox, _WormholeSkybox_HDR, _SkyboxBrightness);
                         
                         finalColor.rgb = ApplyBackgroundDoppler(col_Outside, doppler);
                         
@@ -392,7 +405,7 @@ Shader "DarkRelativity/Singularity"
                     float theta_Lensed = theta - theta_H * distFactor;
                     float3 ray_Lensed = singularityDir * cos(theta_Lensed) + perpendicular * sin(theta_Lensed);
                     
-                    if (distToCenter < worldRs)
+                    if (distToCenter <= meshRadius)
                     {
 #ifdef USE_MANUAL_PROBE
                         col_Outside = texCUBElod(_ManualEnvironmentMap, float4(ray_Lensed, 0.0)).rgb;
@@ -424,6 +437,8 @@ Shader "DarkRelativity/Singularity"
 #endif
                         col_Outside = lerp(probeCol, grabCol, blend);
                     }
+                    
+                    col_Outside = CheckOtherSingularity(col_Outside, eyePos, ray_Lensed, _OtherSingularityPos, _OtherSingularityRadius, _OtherSingularityType, _WormholeSkybox, _WormholeSkybox_HDR, _SkyboxBrightness);
                     
                     insideFactor = 1.0 - smoothstep(theta_H - _EdgeBlendWidth, theta_H + _EdgeBlendWidth, theta);
                     finalColor.rgb = lerp(col_Outside, col_Inside, insideFactor);

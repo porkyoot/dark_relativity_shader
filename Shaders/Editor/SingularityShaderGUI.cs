@@ -46,6 +46,54 @@ namespace DarkRelativity
             MaterialProperty useManualProbe = FindProperty("_UseManualProbe", properties, false);
             MaterialProperty manualEnvironmentMap = FindProperty("_ManualEnvironmentMap", properties);
 
+            MaterialProperty otherSingularityPos = FindProperty("_OtherSingularityPos", properties);
+            MaterialProperty otherSingularityRadius = FindProperty("_OtherSingularityRadius", properties);
+            MaterialProperty otherSingularityType = FindProperty("_OtherSingularityType", properties);
+
+            // Auto-detect other singularity in the active scene to dynamically lens each other
+            Vector4 otherPos = Vector4.zero;
+            float otherRadius = 0f;
+            float otherType = 0f; // 0 = None, 1 = Black Hole, 2 = Wormhole
+            
+            Renderer[] renderers = Object.FindObjectsOfType<Renderer>();
+            foreach (var r in renderers)
+            {
+                if (r == null || !r.gameObject.activeInHierarchy) continue;
+                
+                Material m = r.sharedMaterial;
+                if (m == null || m == targetMat) continue;
+                
+                Shader s = m.shader;
+                if (s == null) continue;
+                
+                if (s.name.Contains("DarkRelativity/Singularity"))
+                {
+                    Transform t = r.transform;
+                    otherPos = t.position;
+                    
+                    float scale = Mathf.Max(t.lossyScale.x, Mathf.Max(t.lossyScale.y, t.lossyScale.z));
+                    float realRad = m.HasProperty("_RealRadius") ? m.GetFloat("_RealRadius") : 0.15f;
+                    
+                    // Schwarzschild Black Hole apparent horizon is lensed to 2.598x, Wormhole throat is 1.0x
+                    bool isBH = m.IsKeywordEnabled("_ANALYTICMETRIC_BLACKHOLE");
+                    if (isBH)
+                    {
+                        otherType = 1.0f; // Black Hole
+                        otherRadius = scale * realRad * 2.598076f;
+                    }
+                    else
+                    {
+                        otherType = 2.0f; // Wormhole
+                        otherRadius = scale * realRad * 1.0f;
+                    }
+                    break; // Support one other singularity for interaction
+                }
+            }
+            
+            otherSingularityPos.vectorValue = otherPos;
+            otherSingularityRadius.floatValue = otherRadius;
+            otherSingularityType.floatValue = otherType;
+
             // 1. Choose Singularity Type at the top
             MetricType metric = (MetricType)analyticMetric.floatValue;
             EditorGUI.BeginChangeCheck();
@@ -114,6 +162,7 @@ namespace DarkRelativity
                 materialEditor.ShaderProperty(useManualProbe, "Use Manual Environment Map");
             }
             materialEditor.ShaderProperty(manualEnvironmentMap, "Manual Environment Map");
+
 
             // 6. Geodesic Baking (with parameter persistence)
             EditorGUILayout.Space();

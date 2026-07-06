@@ -176,4 +176,37 @@ inline half3 ApplyBackgroundDoppler(half3 rgb, float doppler)
     return col * (half)beaming;
 }
 
+inline half3 CheckOtherSingularity(half3 originalColor, float3 eyePos, float3 ray_Lensed, float4 otherPos, float otherRadius, float otherType, samplerCUBE wormholeSkybox, half4 wormholeSkybox_HDR, float skyboxBrightness)
+{
+    if (otherType > 0.5 && otherRadius > 0.001)
+    {
+        float3 O = eyePos - otherPos.xyz;
+        float B = dot(O, ray_Lensed);
+        float C = dot(O, O) - otherRadius * otherRadius;
+        float D = B * B - C;
+        if (D >= 0.0)
+        {
+            float t1 = -B - sqrt(D);
+            float t2 = -B + sqrt(D);
+            float t = (C < 0.0) ? 0.0 : ((t1 > 0.0) ? t1 : t2);
+            
+            if (t > 0.0)
+            {
+                if (otherType < 1.5)
+                {
+                    // Black Hole: render as a black sphere
+                    return half3(0,0,0);
+                }
+                else
+                {
+                    // Wormhole: render as a sphere showing Universe B skybox
+                    half4 otherSky = texCUBElod(wormholeSkybox, float4(ray_Lensed, 0.0));
+                    return DecodeHDR(otherSky, wormholeSkybox_HDR) * skyboxBrightness;
+                }
+            }
+        }
+    }
+    return originalColor;
+}
+
 #endif // BLACK_HOLE_COMMON_INCLUDED

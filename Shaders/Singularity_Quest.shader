@@ -38,6 +38,11 @@ Shader "DarkRelativity/Singularity (Quest)"
         // === ENVIRONMENT (Required for Quest) ===
         [NoScaleOffset] _ManualEnvironmentMap("Manual Environment Map", Cube) = "black" {}
         
+        // === OTHER SINGULARITY INTERACTION ===
+        _OtherSingularityPos("Other Singularity Position", Vector) = (0,0,0,0)
+        _OtherSingularityRadius("Other Singularity Radius", Float) = 0.0
+        [KeywordEnum(None, BlackHole, Wormhole)] _OtherSingularityType("Other Singularity Type", Float) = 0
+        
         // === BAKER PERSISTENCE (hidden, set by ShaderGUI) ===
         [HideInInspector] _BakerResolution("Baker Resolution", Float) = 512
         [HideInInspector] _BakerMaxSteps("Baker Max Steps", Float) = 10000
@@ -79,6 +84,11 @@ Shader "DarkRelativity/Singularity (Quest)"
             sampler2D _GeodesicLUT;
             
             float _LUTMaxDistance;
+            
+            float4 _OtherSingularityPos;
+            float _OtherSingularityRadius;
+            float _OtherSingularityType;
+            
             float _SkyboxBrightness;
             float _InnerRefraction;
             float _InnerCurvePower;
@@ -233,6 +243,8 @@ Shader "DarkRelativity/Singularity (Quest)"
                         half4 probeColRaw = texCUBElod(_ManualEnvironmentMap, float4(ray_Lensed, 0.0));
                         col_Outside = DecodeHDR(probeColRaw, _ManualEnvironmentMap_HDR);
                         
+                        col_Outside = CheckOtherSingularity(col_Outside, eyePos, ray_Lensed, _OtherSingularityPos, _OtherSingularityRadius, _OtherSingularityType, _WormholeSkybox, _WormholeSkybox_HDR, _SkyboxBrightness);
+                        
                         // Rotational Doppler
                         doppler = GetUnifiedDoppler(rayDir, singularityDir, perpendicular, distToCenter, worldRs);
                         finalColor.rgb = ApplyBackgroundDoppler(col_Outside, doppler);
@@ -293,6 +305,9 @@ Shader "DarkRelativity/Singularity (Quest)"
                         
                         half4 probeColor = texCUBElod(_ManualEnvironmentMap, float4(ray_Lensed, 0.0));
                         col_Outside = DecodeHDR(probeColor, _ManualEnvironmentMap_HDR);
+                        
+                        col_Outside = CheckOtherSingularity(col_Outside, eyePos, ray_Lensed, _OtherSingularityPos, _OtherSingularityRadius, _OtherSingularityType, _WormholeSkybox, _WormholeSkybox_HDR, _SkyboxBrightness);
+                        
                         finalColor.rgb = ApplyBackgroundDoppler(col_Outside, doppler);
                         
                         float fringeInTheta = theta_H;
@@ -336,6 +351,8 @@ Shader "DarkRelativity/Singularity (Quest)"
                     
                     half4 probeColRaw = texCUBElod(_ManualEnvironmentMap, float4(ray_Lensed, 0.0));
                     col_Outside = DecodeHDR(probeColRaw, _ManualEnvironmentMap_HDR);
+                    
+                    col_Outside = CheckOtherSingularity(col_Outside, eyePos, ray_Lensed, _OtherSingularityPos, _OtherSingularityRadius, _OtherSingularityType, _WormholeSkybox, _WormholeSkybox_HDR, _SkyboxBrightness);
                     
                     insideFactor = 1.0 - smoothstep(theta_H - _EdgeBlendWidth, theta_H + _EdgeBlendWidth, theta);
                     finalColor.rgb = lerp(col_Outside, col_Inside, insideFactor);
