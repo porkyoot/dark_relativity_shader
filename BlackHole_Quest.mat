@@ -27,16 +27,25 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _PhysicsLUT:
+        m_Texture: {fileID: 2800000, guid: d2835ffd0c375ef34b92f665a91d7002, type: 2}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
+    - _BaseTemperature: 6500
     - _ChromaticAberration: 0.05
     - _DistortionPower: 1.2
     - _DistortionStrength: 1
     - _FringeStrength: 3
     - _FringeWidth: 0.08
+    - _HorizonLensingLimit: 0.85
+    - _MaxDeflectionAngle: 3.77
     - _RealRadius: 0.3
     - _RedshiftFactor: 1.5
     - _RotationSpeed: 0.5
+    - _RotationVelocity: 50
+    - _SpeedOfLight: 100
     - _UseDepthOcclusion: 0
     m_Colors:
     - _RotationAxis: {r: 0, g: 1, b: 0, a: 0}

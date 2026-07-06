@@ -14,13 +14,10 @@ Shader "DarkRelativity/BlackHole"
         _RotationVelocity("Rotation Velocity (+-)", Float) = 50.0
         
         [Header(Thermodynamics and Fringe)]
-        _BaseTemperature("Base Plasma Temp (K)", Range(1000, 15000)) = 6500.0
         _FringeWidth("Fringe Width", Range(0.0, 0.5)) = 0.08
         _FringeStrength("Fringe Strength", Range(0, 10)) = 3.0
         
-        [Header(Depth Occlusion Settings)]
-        [Toggle] _UseDepthOcclusion("Use Depth Occlusion", Float) = 0
-        
+
         [Header(Advanced Calibration Settings)]
         _HorizonLensingLimit("Horizon Lensing Limit", Range(0.5, 0.99)) = 0.85
         _MaxDeflectionAngle("Max Deflection Angle (Rad)", Range(1.0, 10.0)) = 3.77
@@ -39,9 +36,10 @@ Shader "DarkRelativity/BlackHole"
         
         GrabPass
         {
-            "_GrabTexture"
+            "_DarkRelativityGrab"
         }
         
+
         Pass
         {
             Tags { "LightMode" = "Always" }
@@ -57,9 +55,8 @@ Shader "DarkRelativity/BlackHole"
             
             #include "BlackHoleCommon.cginc"
             
-            UNITY_DECLARE_SCREENSPACE_TEXTURE(_GrabTexture);
-            float4 _GrabTexture_TexelSize;
-            UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
+            UNITY_DECLARE_SCREENSPACE_TEXTURE(_DarkRelativityGrab);
+            float4 _DarkRelativityGrab_TexelSize;
             
             v2f vert(appdata v)
             {
@@ -84,18 +81,8 @@ Shader "DarkRelativity/BlackHole"
                     discard;
                 }
                 
-                float2 screenUv = i.grabPos.xy / i.grabPos.w;
-                float rawDepth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, screenUv);
-                float sceneLinearDepth = LinearEyeDepth(rawDepth);
-                
-                // Occlusion des objets physiques de premier plan
-                if (_UseDepthOcclusion > 0.5 && distToCenter > meshRadius)
-                {
-                    if (sceneLinearDepth < i.grabPos.z)
-                    {
-                        discard;
-                    }
-                }
+
+
                 
                 float worldRs = meshRadius * saturate(_RealRadius / 0.5);
                 
@@ -130,34 +117,7 @@ Shader "DarkRelativity/BlackHole"
                     cosTheta_H = - (1.0 - distToCenter / max(worldRs, 0.0001));
                 }
                 
-                bool occludedByScene = false;
-                float3 rayOrigin = eyePos;
-                float3 rayDirection = rayDir;
-                float3 centerToCam = rayOrigin - center;
-                
-                float B = dot(rayDirection, centerToCam);
-                float C = dot(centerToCam, centerToCam) - worldRs * worldRs;
-                float discriminant = B * B - C;
-                
-                if (_UseDepthOcclusion > 0.5 && discriminant >= 0.0)
-                {
-                    float t_horizon = -B - sqrt(discriminant);
-                    if (t_horizon > 0.0)
-                    {
-                        float3 intersectionPoint = rayOrigin + rayDirection * t_horizon;
-                        float4 horizonClipPos = UnityWorldToClipPos(intersectionPoint);
-                        float horizonDepth = horizonClipPos.z / horizonClipPos.w;
-                        #if defined(UNITY_REVERSED_Z)
-                        bool isFarPlane = (rawDepth <= 1e-5);
-                        occludedByScene = (rawDepth > horizonDepth) && !isFarPlane;
-                        #else
-                        bool isFarPlane = (rawDepth >= 0.99999);
-                        occludedByScene = (rawDepth < horizonDepth) && !isFarPlane;
-                        #endif
-                    }
-                }
-                
-                if (cosTheta > cosTheta_H && !occludedByScene)
+                if (cosTheta > cosTheta_H)
                 {
                     finalColor = fixed4(0, 0, 0, edgeFade);
                 }
@@ -170,8 +130,6 @@ Shader "DarkRelativity/BlackHole"
                     float3 perpVec = rayDir - singularityDir * cosTheta;
                     float perpLen = length(perpVec);
                     float3 perpendicular = (perpLen > 1e-5) ? (perpVec / perpLen) : float3(0.0, 0.0, 0.0);
-                    
-                    float doppler = GetUnifiedDoppler(rayDir, singularityDir, perpendicular, distToCenter, worldRs);
                     
                     float fade = 1.0;
                     if (distToCenter > meshRadius)
@@ -188,6 +146,7 @@ Shader "DarkRelativity/BlackHole"
                     
                     distFactor = min(distFactor, _MaxDeflectionAngle / max(theta_H, 0.0001));
                     
+                    float doppler = GetUnifiedDoppler(rayDir, singularityDir, perpendicular, distToCenter, worldRs);
                     float theta_Lensed = theta - theta_H * distFactor;
                     float3 ray_Lensed = singularityDir * cos(theta_Lensed) + perpendicular * sin(theta_Lensed);
                     
@@ -201,7 +160,7 @@ Shader "DarkRelativity/BlackHole"
                     }
                     else
                     {
-                        float3 proj_Lensed = eyePos + (occludedByScene ? rayDir : ray_Lensed) * distToCenter;
+                        float3 proj_Lensed = eyePos + ray_Lensed * distToCenter;
                         float4 clip_Lensed = UnityWorldToClipPos(proj_Lensed);
                         float2 uv_Lensed = ComputeGrabScreenPos(clip_Lensed).xy / max(clip_Lensed.w, 0.0001);
                         
@@ -212,7 +171,7 @@ Shader "DarkRelativity/BlackHole"
                         float edgeDist = min(distToEdge.x, distToEdge.y);
                         float blend = inBounds ? smoothstep(0.0, blendW, edgeDist) : 0.0;
                         
-                        half3 grabCol = UNITY_SAMPLE_SCREENSPACE_TEXTURE(_GrabTexture, uv_Lensed).rgb;
+                        half3 grabCol = UNITY_SAMPLE_SCREENSPACE_TEXTURE(_DarkRelativityGrab, uv_Lensed).rgb;
                         half3 probeCol = DecodeHDR(UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_Lensed, 0.0), unity_SpecCube0_HDR);
                         
                         col = lerp(probeCol, grabCol, blend);
@@ -221,20 +180,18 @@ Shader "DarkRelativity/BlackHole"
                     
                     finalColor.rgb = col;
                     
-                    if (!occludedByScene)
-                    {
+
                         float fringeInTheta = theta_H;
                         float fringeOutTheta = theta_H * (1.0 + _FringeWidth);
                         
                         if (_FringeWidth > 0.0 && theta < fringeOutTheta)
                         {
-                            float fringeFactor = smoothstep(fringeOutTheta, fringeInTheta, theta) * edgeFade;
-                            float3 fringeColor = GetFringeColor(doppler);
-                            float beaming = pow(max(doppler, 0.0001), 3.0);
-                            float3 fringeGlow = fringeColor * fringeFactor * _FringeStrength * beaming;
-                            finalColor.rgb = lerp(finalColor.rgb, finalColor.rgb + fringeGlow, fringeFactor);
+                            half fringeFactor = (half)(smoothstep(fringeOutTheta, fringeInTheta, theta) * edgeFade);
+                            half beaming = (half)pow(max(doppler, 0.0001), 3.0);
+                            
+                            // Boost the intensity of the skybox/background sample
+                            finalColor.rgb *= (1.0 + fringeFactor * _FringeStrength * beaming);
                         }
-                    }
                     
                     finalColor.a = edgeFade;
                 }
