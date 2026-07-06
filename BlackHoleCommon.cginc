@@ -96,14 +96,17 @@ inline float GetUnifiedDoppler(float3 rayDir, float3 singularityDir, float3 perp
     }
     float theta_H = acos(clamp(cosTheta_H, -1.0, 1.0));
     
-    // Calculate rotation natively to avoid LUT interpolation artifacts at distance
-    float angleDecay = pow(max(theta_H, 0.0001) / max(theta, 0.0001), 3.0);
-    float R = max(distToCenter, 0.0001);
-    float v = _RotationVelocity * angleDecay * (worldRs / R);
+    // Calculate rotation natively. _RotationVelocity is a fraction of c (-0.99 to 0.99)
+    // We decay it as a power of 1.5 so the visible accretion area retains some velocity
+    float angleDecay = pow(max(theta_H, 0.0001) / max(theta, 0.0001), 1.5);
+    float distanceDecay = sqrt(worldRs / max(distToCenter, 0.0001));
+    float v_frac = _RotationVelocity * angleDecay * distanceDecay;
     
     // Relativistic Doppler from rotation
-    float v_proj = dot(perpendicular, spinDir) * v;
-    float beta = clamp(v_proj / c, -0.999, 0.999);
+    float v_proj = dot(perpendicular, spinDir) * v_frac;
+    
+    // We multiply by an extra factor of 2.0 to make the color shift very visible in the deformation
+    float beta = clamp(v_proj * 2.0, -0.99, 0.99);
     
     // Doppler shift formula: D = sqrt((1 + beta) / (1 - beta))
     float spinDopplerFactor = sqrt((1.0 + beta) / (1.0 - beta));

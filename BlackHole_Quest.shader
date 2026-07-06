@@ -82,8 +82,11 @@ Shader "DarkRelativity/BlackHole_Quest"
                 float2 V = (uv - centerUv) * aspectCorrect;
                 float r = length(V);
                 
-                // Scale-independent world event horizon radius
-                float worldRs = meshRadius * saturate(_RealRadius / 0.5);
+                float3 localY = normalize(float3(unity_ObjectToWorld._m01, unity_ObjectToWorld._m11, unity_ObjectToWorld._m21));
+                float spinAlignment = dot(rayDir, localY);
+                // Squeeze the poles (flattening) proportional to rotation velocity
+                float squeeze = 1.0 - (spinAlignment * spinAlignment) * abs(_RotationVelocity) * 0.5;
+                float worldRs = meshRadius * saturate(_RealRadius / 0.5) * squeeze;
                 
                 // Calculate VR-safe screen-space radii mathematically using focal length
                 float F = UNITY_MATRIX_P[1][1] * 0.5;

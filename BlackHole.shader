@@ -84,7 +84,11 @@ Shader "DarkRelativity/BlackHole"
 
 
                 
-                float worldRs = meshRadius * saturate(_RealRadius / 0.5);
+                float3 localY = normalize(float3(unity_ObjectToWorld._m01, unity_ObjectToWorld._m11, unity_ObjectToWorld._m21));
+                float spinAlignment = dot(rayDir, localY);
+                // Squeeze the poles (flattening) proportional to rotation velocity
+                float squeeze = 1.0 - (spinAlignment * spinAlignment) * abs(_RotationVelocity) * 0.5;
+                float worldRs = meshRadius * saturate(_RealRadius / 0.5) * squeeze;
                 
                 // --- Calculs originaux de distorsion ---
                 float aspect = UNITY_MATRIX_P[1][1] / UNITY_MATRIX_P[0][0];

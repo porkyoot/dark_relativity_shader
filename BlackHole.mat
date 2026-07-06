@@ -101,7 +101,7 @@ Material:
     - _RealRadius: 0.15
     - _RedshiftFactor: 0.66
     - _RotationSpeed: 0.5
-    - _RotationVelocity: 50
+    - _RotationVelocity: 1.6
     - _ScreenBorderBlendWidth: 0.15
     - _ShowOthers: 0
     - _SmoothnessTextureChannel: 0
