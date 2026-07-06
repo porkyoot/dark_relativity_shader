@@ -73,25 +73,30 @@ Material:
     - _BumpScale: 1
     - _Cutoff: 0.5
     - _DetailNormalMapScale: 1
-    - _DistortionPower: 1.2
-    - _DistortionStrength: 1
+    - _DistortionPower: 0.81
+    - _DistortionStrength: 0.6
     - _DstBlend: 0
+    - _EdgeBlendWidth: 0.121
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
     - _HorizonLensingLimit: 0.85
-    - _InnerRefraction: 1
+    - _InnerCurvePower: 2.59
+    - _InnerRefraction: 0.24
     - _MaxDeflectionAngle: 3.77
+    - _MaxRings: 4
     - _Metallic: 0
     - _Mode: 0
     - _OcclusionStrength: 1
     - _Parallax: 0.02
-    - _ScreenBorderBlendWidth: 0.15
+    - _PhotonRingIntensity: 5
+    - _PhotonRingWidth: 0.02
+    - _ScreenBorderBlendWidth: 0.114
     - _SkyboxBrightness: 1
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
     - _SrcBlend: 1
-    - _ThroatRadius: 0.15
+    - _ThroatRadius: 0.171
     - _UVSec: 0
     - _UseManualProbe: 1
     - _ZWrite: 1

@@ -69,8 +69,6 @@ Shader "DarkRelativity/Wormhole"
                 float3 worldPos : TEXCOORD1;
                 float3 normalWorld : TEXCOORD2;
                 float4 screenCenter : TEXCOORD3;
-                float4 constants : TEXCOORD4;
-                float3 singularityDir : TEXCOORD5;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
@@ -95,7 +93,7 @@ Shader "DarkRelativity/Wormhole"
             
             inline float3 GetEyePos()
             {
-                return float3(unity_CameraToWorld._m03, unity_CameraToWorld._m13, unity_CameraToWorld._m23);
+                return mul(unity_CameraToWorld, float4(0.0, 0.0, 0.0, 1.0)).xyz;
             }
 
             inline float GetMeshRadius()
@@ -119,26 +117,6 @@ Shader "DarkRelativity/Wormhole"
                 float3 centerWorld = unity_ObjectToWorld._m03_m13_m23;
                 o.screenCenter = ComputeGrabScreenPos(UnityWorldToClipPos(centerWorld));
                 
-                float3 eyePos = GetEyePos();
-                float distToCenter = distance(eyePos, centerWorld);
-                float meshRadius = GetMeshRadius();
-                float worldRs = meshRadius * saturate(_ThroatRadius / 0.5);
-                
-                float cosTheta_H;
-                if (distToCenter >= worldRs)
-                {
-                    float sinTheta_H = worldRs / max(distToCenter, 0.0001);
-                    cosTheta_H = sqrt(max(0.0, 1.0 - sinTheta_H * sinTheta_H));
-                }
-                else
-                {
-                    cosTheta_H = - (1.0 - distToCenter / max(worldRs, 0.0001));
-                }
-                float theta_H = acos(clamp(cosTheta_H, -1.0, 1.0));
-                
-                o.constants = float4(distToCenter, meshRadius, theta_H, worldRs);
-                o.singularityDir = normalize(centerWorld - eyePos);
-                
                 return o;
             }
             
@@ -148,20 +126,19 @@ Shader "DarkRelativity/Wormhole"
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 
                 float3 eyePos = GetEyePos();
+                float3 center = unity_ObjectToWorld._m03_m13_m23;
                 float3 normalWorld = normalize(i.normalWorld);
                 float3 rayDir = normalize(i.worldPos - eyePos);
-                
-                float distToCenter = i.constants.x;
-                float meshRadius = i.constants.y;
-                float theta_H = i.constants.z;
-                float worldRs = i.constants.w;
-                float3 singularityDir = normalize(i.singularityDir);
+                float distToCenter = distance(eyePos, center);
+                float meshRadius = GetMeshRadius();
                 
                 // Backface culling optimisation
                 if (distToCenter > meshRadius && dot(normalWorld, rayDir) > 0.0)
                 {
                     discard;
                 }
+                
+                float worldRs = meshRadius * saturate(_ThroatRadius / 0.5);
                 
                 // Screen parameters
                 float aspect = UNITY_MATRIX_P[1][1] / UNITY_MATRIX_P[0][0];
@@ -178,56 +155,67 @@ Shader "DarkRelativity/Wormhole"
                 
                 fixed4 finalColor = fixed4(0, 0, 0, edgeFade);
                 
+                float3 singularityDir = normalize(center - eyePos);
                 float cosTheta = dot(rayDir, singularityDir); 
+                
+                float cosTheta_H;
+                if (distToCenter >= worldRs)
+                {
+                    float sinTheta_H = worldRs / max(distToCenter, 0.0001);
+                    cosTheta_H = sqrt(max(0.0, 1.0 - sinTheta_H * sinTheta_H));
+                }
+                else
+                {
+                    cosTheta_H = - (1.0 - distToCenter / max(worldRs, 0.0001));
+                }
+                
                 float theta = acos(clamp(cosTheta, -1.0, 1.0));
+                float theta_H = acos(clamp(cosTheta_H, -1.0, 1.0));
                 
                 float3 perpVec = rayDir - singularityDir * cosTheta;
                 float perpLen = length(perpVec);
                 float3 perpendicular = (perpLen > 1e-5) ? (perpVec / perpLen) : float3(0.0, 0.0, 0.0);
                 
-                // Calculate distance-based fade to eliminate distortion right at the threshold
-                float distFromHorizon = abs(distToCenter - worldRs);
-                half transitionFade = saturate((half)(distFromHorizon / max(worldRs * 0.5, 0.0001)));
-                
                 // Calculate INSIDE Wormhole color
-                float normalizedTheta = saturate(theta / max(theta_H, 0.0001));
+                float normalizedTheta = theta / max(theta_H, 0.0001);
                 
                 // Linear mapping for the clear window in the center
                 float baseMapping = normalizedTheta * 3.1415926535 * _InnerRefraction;
                 
-                // Scaled power curve to guarantee exactly _MaxRings at the horizon without clipping, scaled by transitionFade
-                float ringMapping = pow(normalizedTheta, _InnerCurvePower) * (_MaxRings * 6.283185307) * (float)transitionFade;
+                // Asymptotic function that goes to infinity at the edge
+                float distBase_Inner = normalizedTheta / max(1.0 - normalizedTheta, 0.0001);
+                float infiniteRings = _InnerCurvePower * pow(distBase_Inner, _DistortionPower);
                 
-                float theta_out = baseMapping + ringMapping;
+                // Limit the infinite rings to prevent pixelated noise at the extreme edge
+                infiniteRings = min(infiniteRings, _MaxRings * 6.283185307);
                 
-                float sin_out, cos_out;
-                sincos(theta_out, sin_out, cos_out);
-                float3 ray_Wormhole = singularityDir * cos_out + perpendicular * sin_out;
+                float theta_out = baseMapping + infiniteRings;
+                
+                float3 ray_Wormhole = singularityDir * cos(theta_out) + perpendicular * sin(theta_out);
                 
                 half4 skyColor = texCUBElod(_WormholeSkybox, float4(ray_Wormhole, 0.0));
                 half3 col_Inside = DecodeHDR(skyColor, _WormholeSkybox_HDR) * _SkyboxBrightness;
                 
                 // Calculate OUTSIDE Lensing color
-                half fade = 1.0h;
+                float fade = 1.0;
                 if (distToCenter > meshRadius)
                 {
                     float sinTheta_mesh = meshRadius / distToCenter;
                     float cosTheta_mesh = sqrt(max(0.0, 1.0 - sinTheta_mesh * sinTheta_mesh));
                     float theta_mesh = acos(clamp(cosTheta_mesh, -1.0, 1.0));
-                    fade = saturate((half)((theta_mesh - theta) / max(theta_mesh * 0.15, 0.0001)));
+                    fade = saturate((theta_mesh - theta) / max(theta_mesh * 0.15, 0.0001));
                 }
                 
-                // Normalized coordinate: 1.0 at the horizon, falling off as 1/r
-                half outerNorm = saturate((half)(theta_H / max(theta, 0.0001)));
+                // Exact asymptote at the horizon for infinite outer rings
+                float distBase = theta_H / max(theta - theta_H, 0.0001);
+                float oppositeFade = cos(theta * 0.5);
+                float distFactor = _DistortionStrength * pow(distBase, _DistortionPower) * fade * oppositeFade;
                 
-                // Scaled power curve ensures exactly _MaxRings at the horizon, scaled by transitionFade
-                half distFactor = pow(outerNorm, (half)_DistortionPower) * ((half)_MaxRings * 6.283185307h) * fade * transitionFade;
+                // Limit the rings to prevent pixelated noise
+                distFactor = min(distFactor, (_MaxRings * 6.283185307) / max(theta_H, 0.0001));
                 
-                float theta_Lensed = theta - theta_H * (float)distFactor;
-                
-                float sin_lensed, cos_lensed;
-                sincos(theta_Lensed, sin_lensed, cos_lensed);
-                float3 ray_Lensed = singularityDir * cos_lensed + perpendicular * sin_lensed;
+                float theta_Lensed = theta - theta_H * distFactor;
+                float3 ray_Lensed = singularityDir * cos(theta_Lensed) + perpendicular * sin(theta_Lensed);
                 
                 half3 col_Outside;
                 if (distToCenter < worldRs)
@@ -247,11 +235,11 @@ Shader "DarkRelativity/Wormhole"
                     float4 clip_Lensed = UnityWorldToClipPos(proj_Lensed);
                     float2 uv_Lensed = ComputeGrabScreenPos(clip_Lensed).xy / max(clip_Lensed.w, 0.0001);
                     
-                    half blendW = max((half)_ScreenBorderBlendWidth, 0.02h);
+                    float blendW = max(_ScreenBorderBlendWidth, 0.02);
                     bool inBounds = all(uv_Lensed > 0.0) && all(uv_Lensed < 1.0) && (clip_Lensed.w > 0.0);
                     float2 distToEdge = min(uv_Lensed, 1.0 - uv_Lensed);
-                    half edgeDist = (half)min(distToEdge.x, distToEdge.y);
-                    half blend = inBounds ? smoothstep(0.0h, blendW, edgeDist) : 0.0h;
+                    float edgeDist = min(distToEdge.x, distToEdge.y);
+                    float blend = inBounds ? smoothstep(0.0, blendW, edgeDist) : 0.0;
                     
                     half3 grabCol = UNITY_SAMPLE_SCREENSPACE_TEXTURE(_DarkRelativityGrab, uv_Lensed).rgb;
                     
@@ -266,10 +254,10 @@ Shader "DarkRelativity/Wormhole"
                     col_Outside = lerp(probeCol, grabCol, blend);
                 }
                 
-                // Smooth threshold blend between Inside and Outside (done in float for transition accuracy, then cast)
+                // Smooth threshold blend between Inside and Outside
                 float insideFactor = 1.0 - smoothstep(theta_H - _EdgeBlendWidth, theta_H + _EdgeBlendWidth, theta);
-                finalColor.rgb = lerp(col_Outside, col_Inside, (half)insideFactor);
-                finalColor.a = (half)edgeFade;
+                finalColor.rgb = lerp(col_Outside, col_Inside, insideFactor);
+                finalColor.a = edgeFade;
                 
                 return finalColor;
             }
