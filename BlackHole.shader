@@ -32,114 +32,23 @@ Shader "DarkRelativity/BlackHole"
     {
         Tags 
         { 
+            // On se place juste après les transparences standards du monde
             "Queue" = "Transparent+10" 
             "RenderType" = "Transparent" 
             "DisableBatching" = "True"
-            "ZWrite" = "False"
-            "ZTest" = "LEqual"
-
         }
         
-        // ==========================================
-        // PASSE 1 : OCCLUSION (Z-BUFFER SEUL)
-        // ==========================================
-        Pass
-        {
-            Name "DepthOcclusionCore"
-            Tags { "LightMode" = "Always" }
-            ZWrite On
-            ColorMask 0 // N'écrit que la profondeur, aucune couleur
-            Cull Off
-            
-            CGPROGRAM
-            #pragma vertex vert
-            #pragma fragment frag
-            
-            #include "BlackHoleCommon.cginc"
-            UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
-            
-            v2f vert(appdata v)
-            {
-                return vert_common(v);
-            }
-            
-            fixed4 frag(v2f i) : SV_Target
-            {
-                UNITY_SETUP_INSTANCE_ID(i);
-                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
-                
-                float3 eyePos = GetEyePos();
-                float3 center = unity_ObjectToWorld._m03_m13_m23;
-                float3 normalWorld = normalize(i.normalWorld);
-                float3 rayDir = normalize(i.worldPos - eyePos);
-                float distToCenter = distance(eyePos, center);
-                float meshRadius = GetMeshRadius();
-                
-                // Optimisation : Backface culling
-                if (distToCenter > meshRadius && dot(normalWorld, rayDir) > 0.0)
-                {
-                    discard;
-                }
-                
-                // Occlusion du premier plan
-                float2 screenUv = i.grabPos.xy / i.grabPos.w;
-                float rawDepth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, screenUv);
-                float sceneLinearDepth = LinearEyeDepth(rawDepth);
-                
-                if (_UseDepthOcclusion > 0.5 && distToCenter > meshRadius)
-                {
-                    if (sceneLinearDepth < i.grabPos.z)
-                    {
-                        discard;
-                    }
-                }
-                
-                float worldRs = meshRadius * saturate(_RealRadius / 0.5);
-                float3 singularityDir = normalize(center - eyePos);
-                float cosTheta = dot(rayDir, singularityDir);
-                
-                float cosTheta_H;
-                if (distToCenter >= worldRs)
-                {
-                    float sinTheta_H = worldRs / max(distToCenter, 0.0001);
-                    cosTheta_H = sqrt(max(0.0, 1.0 - sinTheta_H * sinTheta_H));
-                }
-                else
-                {
-                    cosTheta_H = - (1.0 - distToCenter / max(worldRs, 0.0001));
-                }
-                
-                // Si le pixel correspond au cœur du trou noir, on l'inscrit dans le Z-Buffer
-                if (cosTheta > cosTheta_H)
-                {
-                    return fixed4(0, 0, 0, 0); 
-                }
-                
-                // Le reste (l'aura) ne bloque pas la profondeur des objets transparents en arrière-plan
-                discard; 
-                
-                // === L'AJOUT CRUCIAL ===
-                return fixed4(0, 0, 0, 0); 
-            }
-            ENDCG
-        }
-
-        // ==========================================
-        // GRABPASS : CAPTURE DU MONDE DÉJÀ RENDU
-        // ==========================================
         GrabPass
         {
             "_GrabTexture"
         }
         
-        // ==========================================
-        // PASSE 2 : LENTILLE, FRANGE ET COULEURS
-        // ==========================================
         Pass
         {
-            Name "LensingAndFringe"
             Tags { "LightMode" = "Always" }
-            ZWrite Off
+            
+            // LA MODIFICATION SUR TOUT LE MESH EST ICI
+            ZWrite On 
             Cull Off
             Blend SrcAlpha OneMinusSrcAlpha
             
@@ -170,6 +79,7 @@ Shader "DarkRelativity/BlackHole"
                 float distToCenter = distance(eyePos, center);
                 float meshRadius = GetMeshRadius();
                 
+                // Backface culling optimisation
                 if (distToCenter > meshRadius && dot(normalWorld, rayDir) > 0.0)
                 {
                     discard;
@@ -179,8 +89,7 @@ Shader "DarkRelativity/BlackHole"
                 float rawDepth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, screenUv);
                 float sceneLinearDepth = LinearEyeDepth(rawDepth);
                 
-                float worldRs = meshRadius * saturate(_RealRadius / 0.5);
-                
+                // Occlusion des objets physiques de premier plan
                 if (_UseDepthOcclusion > 0.5 && distToCenter > meshRadius)
                 {
                     if (sceneLinearDepth < i.grabPos.z)
@@ -189,6 +98,9 @@ Shader "DarkRelativity/BlackHole"
                     }
                 }
                 
+                float worldRs = meshRadius * saturate(_RealRadius / 0.5);
+                
+                // --- Calculs originaux de distorsion ---
                 float aspect = UNITY_MATRIX_P[1][1] / UNITY_MATRIX_P[0][0];
                 float2 aspectCorrect = float2(aspect, 1.0);
                 
@@ -252,6 +164,7 @@ Shader "DarkRelativity/BlackHole"
                 }
                 else
                 {
+                    // LENSING MATHEMATICS
                     float theta = acos(clamp(cosTheta, -1.0, 1.0));
                     float theta_H = acos(clamp(cosTheta_H, -1.0, 1.0));
                     
@@ -367,6 +280,4 @@ Shader "DarkRelativity/BlackHole"
             ENDCG
         }
     }
-    
-    Fallback "Transparent/Diffuse"
 }
