@@ -112,7 +112,7 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _HorizonLensingLimit: 0.603
+    - _HorizonLensingLimit: 0.8483
     - _InnerCurvePower: 3
     - _InnerRefraction: 1
     - _LUTMaxDistance: 50
@@ -127,11 +127,11 @@ Material:
     - _OtherSingularityType: 2
     - _Parallax: 0.02
     - _PlayerDotSize: 1
-    - _RealRadius: 0.091
+    - _RealRadius: 0.0814
     - _RedshiftFactor: 0.66
     - _RotationSpeed: 0.5
     - _RotationVelocity: 80
-    - _ScreenBorderBlendWidth: 0.15
+    - _ScreenBorderBlendWidth: 0.2364
     - _ShowOthers: 0
     - _SkyboxBrightness: 1
     - _SmoothnessTextureChannel: 0

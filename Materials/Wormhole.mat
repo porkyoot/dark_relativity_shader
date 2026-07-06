@@ -12,7 +12,6 @@ Material:
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
-  - USE_GEODESIC_LUT
   - _ANALYTICMETRIC_WORMHOLE
   m_InvalidKeywords:
   - _OTHERSINGULARITYTYPE_BLACKHOLE
@@ -120,7 +119,7 @@ Material:
     - _ThroatRadius: 0.171
     - _TimeDilationShift: 1
     - _UVSec: 0
-    - _UseGeodesicLUT: 1
+    - _UseGeodesicLUT: 0
     - _UseManualProbe: 0
     - _ZWrite: 1
     m_Colors:
