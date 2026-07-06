@@ -13,6 +13,8 @@ Shader "DarkRelativity/Wormhole"
         [NoScaleOffset] _WormholeSkybox("Wormhole Skybox", Cube) = "_Skybox" {}
         _SkyboxBrightness("Skybox Brightness", Range(0, 10)) = 1.0
         _InnerRefraction("Inner Refraction", Range(0.1, 5.0)) = 1.0
+        _InnerCurvePower("Inner Curve Power", Range(1.0, 8.0)) = 3.0
+        _EdgeBlendWidth("Edge Blend Width", Range(0.001, 0.2)) = 0.05
         
         [Header(Advanced Calibration Settings)]
         _HorizonLensingLimit("Horizon Lensing Limit", Range(0.5, 0.99)) = 0.85
@@ -84,6 +86,8 @@ Shader "DarkRelativity/Wormhole"
             float _DistortionPower;
             float _SkyboxBrightness;
             float _InnerRefraction;
+            float _InnerCurvePower;
+            float _EdgeBlendWidth;
             
             float _HorizonLensingLimit;
             float _MaxDeflectionAngle;
@@ -174,79 +178,84 @@ Shader "DarkRelativity/Wormhole"
                 float perpLen = length(perpVec);
                 float3 perpendicular = (perpLen > 1e-5) ? (perpVec / perpLen) : float3(0.0, 0.0, 0.0);
                 
-                if (cosTheta > cosTheta_H)
+                // Calculate INSIDE Wormhole color
+                float normalizedTheta = theta / max(theta_H, 0.0001);
+                
+                // Linear mapping for the clear window in the center
+                float baseMapping = normalizedTheta * 3.1415926535 * _InnerRefraction;
+                
+                // Asymptotic function that goes to infinity at the edge
+                float distBase_Inner = normalizedTheta / max(1.0 - normalizedTheta, 0.0001);
+                float infiniteRings = _InnerCurvePower * pow(distBase_Inner, _DistortionPower);
+                
+                float theta_out = baseMapping + infiniteRings;
+                
+                float3 ray_Wormhole = singularityDir * cos(theta_out) + perpendicular * sin(theta_out);
+                
+                half4 skyColor = texCUBElod(_WormholeSkybox, float4(ray_Wormhole, 0.0));
+                half3 col_Inside = DecodeHDR(skyColor, _WormholeSkybox_HDR) * _SkyboxBrightness;
+                
+                // Calculate OUTSIDE Lensing color
+                float fade = 1.0;
+                if (distToCenter > meshRadius)
                 {
-                    // INSIDE WORMHOLE THROAT (theta <= theta_H)
-                    // Map the inward ray to an outward view in the other universe
-                    float normalizedTheta = theta / max(theta_H, 0.0001);
-                    float theta_out = normalizedTheta * 3.1415926535 * _InnerRefraction;
-                    
-                    float3 ray_Wormhole = singularityDir * cos(theta_out) + perpendicular * sin(theta_out);
-                    
-                    half4 skyColor = texCUBElod(_WormholeSkybox, float4(ray_Wormhole, 0.0));
-                    half3 decodedSkyColor = DecodeHDR(skyColor, _WormholeSkybox_HDR);
-                    
-                    finalColor.rgb = decodedSkyColor * _SkyboxBrightness;
-                    finalColor.a = edgeFade;
+                    float sinTheta_mesh = meshRadius / distToCenter;
+                    float cosTheta_mesh = sqrt(max(0.0, 1.0 - sinTheta_mesh * sinTheta_mesh));
+                    float theta_mesh = acos(clamp(cosTheta_mesh, -1.0, 1.0));
+                    fade = saturate((theta_mesh - theta) / max(theta_mesh * 0.15, 0.0001));
+                }
+                
+                // Exact asymptote at the horizon for infinite outer rings
+                float distBase = theta_H / max(theta - theta_H, 0.0001);
+                float oppositeFade = cos(theta * 0.5);
+                float distFactor = _DistortionStrength * pow(distBase, _DistortionPower) * fade * oppositeFade;
+                
+                // Allow distFactor to go to infinity (remove _MaxDeflectionAngle cap)
+                
+                float theta_Lensed = theta - theta_H * distFactor;
+                float3 ray_Lensed = singularityDir * cos(theta_Lensed) + perpendicular * sin(theta_Lensed);
+                
+                half3 col_Outside;
+                if (distToCenter < worldRs)
+                {
+                    // Camera is inside the throat looking backward. 
+                    // To make teleportation seamless, looking backward from inside must show the universe we came from (Universe A).
+#ifdef USE_MANUAL_PROBE
+                    col_Outside = texCUBElod(_ManualEnvironmentMap, float4(ray_Lensed, 0.0)).rgb;
+#else
+                    half4 probeColRaw = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_Lensed, 0.0);
+                    col_Outside = DecodeHDR(probeColRaw, unity_SpecCube0_HDR);
+#endif
                 }
                 else
                 {
-                    // OUTSIDE THROAT (LENSING)
-                    float fade = 1.0;
-                    if (distToCenter > meshRadius)
-                    {
-                        float sinTheta_mesh = meshRadius / distToCenter;
-                        float cosTheta_mesh = sqrt(max(0.0, 1.0 - sinTheta_mesh * sinTheta_mesh));
-                        float theta_mesh = acos(clamp(cosTheta_mesh, -1.0, 1.0));
-                        fade = saturate((theta_mesh - theta) / max(theta_mesh * 0.15, 0.0001));
-                    }
+                    float3 proj_Lensed = eyePos + ray_Lensed * distToCenter;
+                    float4 clip_Lensed = UnityWorldToClipPos(proj_Lensed);
+                    float2 uv_Lensed = ComputeGrabScreenPos(clip_Lensed).xy / max(clip_Lensed.w, 0.0001);
                     
-                    float distBase = theta_H / max(theta - theta_H * _HorizonLensingLimit, 0.0001);
-                    float oppositeFade = cos(theta * 0.5);
-                    float distFactor = _DistortionStrength * pow(distBase, _DistortionPower) * fade * oppositeFade;
+                    float blendW = max(_ScreenBorderBlendWidth, 0.02);
+                    bool inBounds = all(uv_Lensed > 0.0) && all(uv_Lensed < 1.0) && (clip_Lensed.w > 0.0);
+                    float2 distToEdge = min(uv_Lensed, 1.0 - uv_Lensed);
+                    float edgeDist = min(distToEdge.x, distToEdge.y);
+                    float blend = inBounds ? smoothstep(0.0, blendW, edgeDist) : 0.0;
                     
-                    distFactor = min(distFactor, _MaxDeflectionAngle / max(theta_H, 0.0001));
+                    half3 grabCol = UNITY_SAMPLE_SCREENSPACE_TEXTURE(_DarkRelativityGrab, uv_Lensed).rgb;
                     
-                    float theta_Lensed = theta - theta_H * distFactor;
-                    float3 ray_Lensed = singularityDir * cos(theta_Lensed) + perpendicular * sin(theta_Lensed);
-                    
-                    half3 col;
-                    
-                    if (distToCenter < worldRs)
-                    {
-                        // If camera is inside the throat
-                        half4 probeColor = texCUBElod(_WormholeSkybox, float4(ray_Lensed, 0.0));
-                        col = DecodeHDR(probeColor, _WormholeSkybox_HDR) * _SkyboxBrightness;
-                    }
-                    else
-                    {
-                        float3 proj_Lensed = eyePos + ray_Lensed * distToCenter;
-                        float4 clip_Lensed = UnityWorldToClipPos(proj_Lensed);
-                        float2 uv_Lensed = ComputeGrabScreenPos(clip_Lensed).xy / max(clip_Lensed.w, 0.0001);
-                        
-                        float blendW = max(_ScreenBorderBlendWidth, 0.02);
-                        
-                        bool inBounds = all(uv_Lensed > 0.0) && all(uv_Lensed < 1.0) && (clip_Lensed.w > 0.0);
-                        float2 distToEdge = min(uv_Lensed, 1.0 - uv_Lensed);
-                        float edgeDist = min(distToEdge.x, distToEdge.y);
-                        float blend = inBounds ? smoothstep(0.0, blendW, edgeDist) : 0.0;
-                        
-                        half3 grabCol = UNITY_SAMPLE_SCREENSPACE_TEXTURE(_DarkRelativityGrab, uv_Lensed).rgb;
-                        
-                        half3 probeCol;
+                    half3 probeCol;
 #ifdef USE_MANUAL_PROBE
-                        probeCol = texCUBElod(_ManualEnvironmentMap, float4(ray_Lensed, 0.0)).rgb;
+                    probeCol = texCUBElod(_ManualEnvironmentMap, float4(ray_Lensed, 0.0)).rgb;
 #else
-                        half4 probeColRaw = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_Lensed, 0.0);
-                        probeCol = DecodeHDR(probeColRaw, unity_SpecCube0_HDR);
+                    half4 probeColRaw = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_Lensed, 0.0);
+                    probeCol = DecodeHDR(probeColRaw, unity_SpecCube0_HDR);
 #endif
-                        
-                        col = lerp(probeCol, grabCol, blend);
-                    }
                     
-                    finalColor.rgb = col;
-                    finalColor.a = edgeFade;
+                    col_Outside = lerp(probeCol, grabCol, blend);
                 }
+                
+                // Smooth threshold blend between Inside and Outside
+                float insideFactor = 1.0 - smoothstep(theta_H - _EdgeBlendWidth, theta_H + _EdgeBlendWidth, theta);
+                finalColor.rgb = lerp(col_Outside, col_Inside, insideFactor);
+                finalColor.a = edgeFade;
                 
                 return finalColor;
             }
