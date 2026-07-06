@@ -16,7 +16,7 @@ GameObject:
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
+  m_StaticEditorFlags: 1
   m_IsActive: 1
 --- !u!4 &5867936821424622621
 Transform:
@@ -95,6 +95,10 @@ PrefabInstance:
     - target: {fileID: 362722599324087268, guid: 34de47cd54db1a536bb5215992a37d19, type: 3}
       propertyPath: m_Name
       value: WormHole Probe
+      objectReference: {fileID: 0}
+    - target: {fileID: 362722599324087268, guid: 34de47cd54db1a536bb5215992a37d19, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 3676217032492695745, guid: 34de47cd54db1a536bb5215992a37d19, type: 3}
       propertyPath: m_LocalPosition.x
