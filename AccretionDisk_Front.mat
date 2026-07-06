@@ -72,9 +72,12 @@ Material:
     - _DstBlend: 0
     - _Emission: 0.825
     - _EnableGeometricSpecularAA: 1
+    - _FadeWidth: 0.2
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
+    - _InnerRadius: 0.5
+    - _IsForeground: 0
     - _LightmapType: 0
     - _Metallic: 0
     - _Mode: 1
