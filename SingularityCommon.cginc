@@ -1,5 +1,5 @@
-#ifndef BLACK_HOLE_COMMON_INCLUDED
-#define BLACK_HOLE_COMMON_INCLUDED
+#ifndef SINGULARITY_COMMON_INCLUDED
+#define SINGULARITY_COMMON_INCLUDED
 
 #include "UnityCG.cginc"
 
@@ -73,10 +73,12 @@ inline float GetUnifiedDoppler(float3 rayDir, float3 singularityDir, float3 perp
     float gravPotential = worldRs / max(distToCenter, 0.0001);
     float cosTheta = dot(rayDir, singularityDir);
     
-    // Gravitational redshift
+    // Gravitational redshift (relaxed scaling)
     float c = max(_SpeedOfLight, 0.001);
-    float z_g = gravPotential * (100.0 / c);
-    float D_grav = exp(-cosTheta * z_g);
+    float z_g = gravPotential * (30.0 / c); // Relaxed multiplier
+    // Clamp D_grav to a much wider range to allow intense color shifts (blueshift/redshift)
+    // without causing glare, since beaming brightness is separately clamped in ApplyBackgroundDoppler.
+    float D_grav = clamp(exp(-cosTheta * z_g), 0.05, 15.0);
     
     // Rotational frame-dragging shift: Local Y axis of the mesh is the spin axis
     float3 localY = normalize(float3(unity_ObjectToWorld._m01, unity_ObjectToWorld._m11, unity_ObjectToWorld._m21));
@@ -105,8 +107,8 @@ inline float GetUnifiedDoppler(float3 rayDir, float3 singularityDir, float3 perp
     // Relativistic Doppler from rotation
     float v_proj = dot(perpendicular, spinDir) * v_frac;
     
-    // We multiply by an extra factor of 2.0 to make the color shift very visible in the deformation
-    float beta = clamp(v_proj * 2.0, -0.99, 0.99);
+    // Relaxed rotational Doppler to keep colors highly saturated instead of flaring to white
+    float beta = clamp(v_proj * 0.8, -0.75, 0.75);
     
     // Doppler shift formula: D = sqrt((1 + beta) / (1 - beta))
     float spinDopplerFactor = sqrt((1.0 + beta) / (1.0 - beta));
@@ -133,6 +135,8 @@ inline half3 HSVtoRGB(half3 c)
 }
 
 
+float _BeamingIntensity;
+
 inline half3 ApplyBackgroundDoppler(half3 rgb, float doppler)
 {
     half3 col = rgb;
@@ -146,7 +150,6 @@ inline half3 ApplyBackgroundDoppler(half3 rgb, float doppler)
             1.0 - s, 0.0,     0.0,
             s,       1.0 - s, 0.0,
             s * 0.5, s,       1.0
-
         );
         col = mul(M_blue, rgb);
         
@@ -166,8 +169,10 @@ inline half3 ApplyBackgroundDoppler(half3 rgb, float doppler)
         col = mul(M_red, rgb);
     }
     
-    // Relativistic Beaming: power-of-three intensity scaling
-    float beaming = pow(max(doppler, 0.0001), 3.0);
+    // Relativistic Beaming: power-of-three intensity scaling (clamped to prevent glare)
+    float rawBeaming = pow(max(doppler, 0.0001), 3.0);
+    float clampedBeaming = clamp(rawBeaming, 0.1, 4.0);
+    float beaming = lerp(1.0, clampedBeaming, _BeamingIntensity);
     return col * (half)beaming;
 }
 

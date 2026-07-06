@@ -8,10 +8,12 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: BlackHole
-  m_Shader: {fileID: 4800000, guid: 3cee37b861e3206b792ab0cfe7cc3939, type: 3}
+  m_Shader: {fileID: 4800000, guid: 4d42525214ed74281aae0c752722efc1, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
-  m_ValidKeywords: []
+  m_ValidKeywords:
+  - USE_GEODESIC_LUT
+  - _ANALYTICMETRIC_BLACKHOLE
   m_InvalidKeywords:
   - _EMISSION
   m_LightmapFlags: 0
@@ -44,11 +46,19 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _GeodesicLUT:
+        m_Texture: {fileID: 2800000, guid: e7bb3997945e5861b8d04b5d4cc6d5ef, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _GrabTexture:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _MainTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ManualEnvironmentMap:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
@@ -72,9 +82,20 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _WormholeSkybox:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
+    - _AnalyticMetric: 0
+    - _BakerMaxDistance: 50
+    - _BakerMaxSteps: 10000
+    - _BakerResolution: 512
+    - _BakerStepSize: 0.005
+    - _BakerThroatRadius: 0.15
     - _BaseTemperature: 6000
+    - _BeamingIntensity: 1
     - _BumpScale: 1
     - _CameraSize: 100
     - _ChromaticAberration: 0.057
@@ -83,34 +104,43 @@ Material:
     - _DistortionPower: 1.2
     - _DistortionStrength: 1
     - _DstBlend: 0
+    - _EdgeBlendWidth: 0.05
     - _FollowPlayer: 1
-    - _FringeStrength: 1.52
-    - _FringeWidth: 0.197
+    - _FringeStrength: 3.67
+    - _FringeWidth: 0.202
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _HorizonLensingLimit: 0.85
+    - _HorizonLensingLimit: 0.625
+    - _InnerCurvePower: 3
+    - _InnerRefraction: 1
+    - _LUTMaxDistance: 50
     - _MaxDeflectionAngle: 3.77
     - _MaxPlayers: 80
+    - _MaxRings: 3
     - _Metallic: 0
     - _Mode: 0
     - _OcclusionStrength: 1
     - _OtherPlayersDotSize: 1
     - _Parallax: 0.02
     - _PlayerDotSize: 1
-    - _RealRadius: 0.15
+    - _RealRadius: 0.091
     - _RedshiftFactor: 0.66
     - _RotationSpeed: 0.5
-    - _RotationVelocity: 1.6
+    - _RotationVelocity: 50
     - _ScreenBorderBlendWidth: 0.15
     - _ShowOthers: 0
+    - _SkyboxBrightness: 1
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
     - _SpeedOfLight: 100
     - _SrcBlend: 1
+    - _TimeDilationShift: 0
     - _UVSec: 0
     - _UseCustomSkybox: 0
     - _UseDepthOcclusion: 0
+    - _UseGeodesicLUT: 1
+    - _UseManualProbe: 0
     - _ZWrite: 1
     - _ZoomLevel: 3
     m_Colors:
