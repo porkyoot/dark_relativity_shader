@@ -1,4 +1,4 @@
-Shader "DarkRelativity/Wormhole"
+Shader "DarkRelativity/Wormhole_Quest"
 {
     Properties
     {
@@ -18,7 +18,6 @@ Shader "DarkRelativity/Wormhole"
         
         [Header(Advanced Calibration Settings)]
         _MaxRings("Max Light Repeats (Rings)", Range(0.0, 20.0)) = 3.0
-        _ScreenBorderBlendWidth("Screen Border Blend Width", Range(0.01, 0.5)) = 0.15
         
         [Header(Fallback Environment)]
         [Toggle(USE_MANUAL_PROBE)] _UseManualProbe("Use Manual Environment Map", Float) = 0
@@ -34,14 +33,9 @@ Shader "DarkRelativity/Wormhole"
             "DisableBatching" = "True"
         }
         
-        GrabPass
-        {
-            "_DarkRelativityGrab"
-        }
-        
         Pass
         {
-            Tags { "LightMode" = "ForwardBase" }
+            Tags { "LightMode" = "Always" }
             
             ZWrite On 
             Cull Off
@@ -65,19 +59,14 @@ Shader "DarkRelativity/Wormhole"
             struct v2f
             {
                 float4 pos : SV_POSITION;
-                float4 grabPos : TEXCOORD0;
-                float3 worldPos : TEXCOORD1;
-                float3 normalWorld : TEXCOORD2;
-                float4 screenCenter : TEXCOORD3;
-                float4 constants : TEXCOORD4;
-                float3 singularityDir : TEXCOORD5;
+                float3 worldPos : TEXCOORD0;
+                float3 normalWorld : TEXCOORD1;
+                float4 constants : TEXCOORD2;
+                float3 singularityDir : TEXCOORD3;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
             
-            UNITY_DECLARE_SCREENSPACE_TEXTURE(_DarkRelativityGrab);
-            float4 _DarkRelativityGrab_TexelSize;
-
             samplerCUBE _WormholeSkybox;
             half4 _WormholeSkybox_HDR;
             samplerCUBE _ManualEnvironmentMap;
@@ -89,9 +78,7 @@ Shader "DarkRelativity/Wormhole"
             float _InnerRefraction;
             float _InnerCurvePower;
             float _EdgeBlendWidth;
-            
             float _MaxRings;
-            float _ScreenBorderBlendWidth;
             
             inline float3 GetEyePos()
             {
@@ -112,13 +99,10 @@ Shader "DarkRelativity/Wormhole"
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
                 
                 o.pos = UnityObjectToClipPos(v.vertex);
-                o.grabPos = ComputeGrabScreenPos(o.pos);
                 o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
                 o.normalWorld = UnityObjectToWorldNormal(v.normal);
                 
                 float3 centerWorld = unity_ObjectToWorld._m03_m13_m23;
-                o.screenCenter = ComputeGrabScreenPos(UnityWorldToClipPos(centerWorld));
-                
                 float3 eyePos = GetEyePos();
                 float distToCenter = distance(eyePos, centerWorld);
                 float meshRadius = GetMeshRadius();
@@ -163,18 +147,18 @@ Shader "DarkRelativity/Wormhole"
                     discard;
                 }
                 
-                // Screen parameters
-                float aspect = UNITY_MATRIX_P[1][1] / UNITY_MATRIX_P[0][0];
-                float2 aspectCorrect = float2(aspect, 1.0);
-                
-                float2 uv = i.grabPos.xy / i.grabPos.w;
-                float2 centerUv = i.screenCenter.xy / i.screenCenter.w;
-                float2 V = (uv - centerUv) * aspectCorrect;
-                float r = length(V);
-                
-                float F = UNITY_MATRIX_P[1][1] * 0.5;
-                float r_mesh_screen = (meshRadius / max(distToCenter, 0.0001)) * F;
-                float edgeFade = (distToCenter > meshRadius) ? saturate((r_mesh_screen - r) / (r_mesh_screen * 0.15 + 1e-5)) : 1.0;
+                // Edge fading for boundaries of the wormhole sphere
+                // Quest-friendly simplified edge fade calculation
+                float edgeFade = 1.0;
+                if (distToCenter > meshRadius)
+                {
+                    float sinTheta_mesh = meshRadius / distToCenter;
+                    float cosTheta_mesh = sqrt(max(0.0, 1.0 - sinTheta_mesh * sinTheta_mesh));
+                    float theta_mesh = acos(clamp(cosTheta_mesh, -1.0, 1.0));
+                    float cosTheta = dot(rayDir, singularityDir);
+                    float theta = acos(clamp(cosTheta, -1.0, 1.0));
+                    edgeFade = saturate((theta_mesh - theta) / max(theta_mesh * 0.15, 0.0001));
+                }
                 
                 fixed4 finalColor = fixed4(0, 0, 0, edgeFade);
                 
@@ -191,19 +175,13 @@ Shader "DarkRelativity/Wormhole"
                 
                 // Calculate INSIDE Wormhole color
                 float normalizedTheta = saturate(theta / max(theta_H, 0.0001));
-                
-                // Linear mapping for the clear window in the center
                 float baseMapping = normalizedTheta * 3.1415926535 * _InnerRefraction;
-                
-                // Scaled power curve to guarantee exactly _MaxRings at the horizon without clipping, scaled by transitionFade
                 float ringMapping = pow(normalizedTheta, _InnerCurvePower) * (_MaxRings * 6.283185307) * (float)transitionFade;
-                
                 float theta_out = baseMapping + ringMapping;
                 
                 float sin_out, cos_out;
                 sincos(theta_out, sin_out, cos_out);
                 float3 ray_Wormhole = singularityDir * cos_out + perpendicular * sin_out;
-                
                 half4 skyColor = texCUBElod(_WormholeSkybox, float4(ray_Wormhole, 0.0));
                 half3 col_Inside = DecodeHDR(skyColor, _WormholeSkybox_HDR) * _SkyboxBrightness;
                 
@@ -217,12 +195,8 @@ Shader "DarkRelativity/Wormhole"
                     fade = saturate((half)((theta_mesh - theta) / max(theta_mesh * 0.15, 0.0001)));
                 }
                 
-                // Normalized coordinate: 1.0 at the horizon, falling off as 1/r
                 half outerNorm = saturate((half)(theta_H / max(theta, 0.0001)));
-                
-                // Scaled power curve ensures exactly _MaxRings at the horizon, scaled by transitionFade
                 half distFactor = pow(outerNorm, (half)_DistortionPower) * ((half)_MaxRings * 6.283185307h) * fade * transitionFade;
-                
                 float theta_Lensed = theta - theta_H * (float)distFactor;
                 
                 float sin_lensed, cos_lensed;
@@ -230,41 +204,12 @@ Shader "DarkRelativity/Wormhole"
                 float3 ray_Lensed = singularityDir * cos_lensed + perpendicular * sin_lensed;
                 
                 half3 col_Outside;
-                if (distToCenter < worldRs)
-                {
-                    // Camera is inside the throat looking backward. 
-                    // To make teleportation seamless, looking backward from inside must show the universe we came from (Universe A).
 #ifdef USE_MANUAL_PROBE
-                    col_Outside = texCUBElod(_ManualEnvironmentMap, float4(ray_Lensed, 0.0)).rgb;
+                col_Outside = texCUBElod(_ManualEnvironmentMap, float4(ray_Lensed, 0.0)).rgb;
 #else
-                    half4 probeColRaw = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_Lensed, 0.0);
-                    col_Outside = DecodeHDR(probeColRaw, unity_SpecCube0_HDR);
+                half4 probeColRaw = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_Lensed, 0.0);
+                col_Outside = DecodeHDR(probeColRaw, unity_SpecCube0_HDR);
 #endif
-                }
-                else
-                {
-                    float3 proj_Lensed = eyePos + ray_Lensed * distToCenter;
-                    float4 clip_Lensed = UnityWorldToClipPos(proj_Lensed);
-                    float2 uv_Lensed = ComputeGrabScreenPos(clip_Lensed).xy / max(clip_Lensed.w, 0.0001);
-                    
-                    half blendW = max((half)_ScreenBorderBlendWidth, 0.02h);
-                    bool inBounds = all(uv_Lensed > 0.0) && all(uv_Lensed < 1.0) && (clip_Lensed.w > 0.0);
-                    float2 distToEdge = min(uv_Lensed, 1.0 - uv_Lensed);
-                    half edgeDist = (half)min(distToEdge.x, distToEdge.y);
-                    half blend = inBounds ? smoothstep(0.0h, blendW, edgeDist) : 0.0h;
-                    
-                    half3 grabCol = UNITY_SAMPLE_SCREENSPACE_TEXTURE(_DarkRelativityGrab, uv_Lensed).rgb;
-                    
-                    half3 probeCol;
-#ifdef USE_MANUAL_PROBE
-                    probeCol = texCUBElod(_ManualEnvironmentMap, float4(ray_Lensed, 0.0)).rgb;
-#else
-                    half4 probeColRaw = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_Lensed, 0.0);
-                    probeCol = DecodeHDR(probeColRaw, unity_SpecCube0_HDR);
-#endif
-                    
-                    col_Outside = lerp(probeCol, grabCol, blend);
-                }
                 
                 // Smooth threshold blend between Inside and Outside (done in float for transition accuracy, then cast)
                 float insideFactor = 1.0 - smoothstep(theta_H - _EdgeBlendWidth, theta_H + _EdgeBlendWidth, theta);
