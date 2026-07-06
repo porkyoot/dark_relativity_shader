@@ -97,6 +97,7 @@ Material:
     - _SpecularHighlights: 1
     - _SrcBlend: 1
     - _ThroatRadius: 0.171
+    - _TimeDilationShift: 1
     - _UVSec: 0
     - _UseManualProbe: 1
     - _ZWrite: 1

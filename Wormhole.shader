@@ -14,6 +14,7 @@ Shader "DarkRelativity/Wormhole"
         _SkyboxBrightness("Skybox Brightness", Range(0, 10)) = 1.0
         _InnerRefraction("Inner Refraction", Range(0.1, 5.0)) = 1.0
         _InnerCurvePower("Inner Curve Power", Range(1.0, 8.0)) = 3.0
+        _TimeDilationShift("Time Dilation Shift (Doppler)", Range(-5.0, 5.0)) = 0.0
         _EdgeBlendWidth("Edge Blend Width", Range(0.001, 0.2)) = 0.05
         
         [Header(Advanced Calibration Settings)]
@@ -86,6 +87,7 @@ Shader "DarkRelativity/Wormhole"
             float _SkyboxBrightness;
             float _InnerRefraction;
             float _InnerCurvePower;
+            float _TimeDilationShift;
             float _EdgeBlendWidth;
             
             float _MaxRings;
@@ -99,6 +101,43 @@ Shader "DarkRelativity/Wormhole"
             inline float GetMeshRadius()
             {
                 return length(float3(unity_ObjectToWorld._m00, unity_ObjectToWorld._m10, unity_ObjectToWorld._m20)) * 0.5;
+            }
+            
+            inline half3 ApplyBackgroundDoppler(half3 rgb, float doppler)
+            {
+                half3 col = rgb;
+                
+                if (doppler > 1.0)
+                {
+                    // Blueshift: Maps energy towards blue
+                    half s = saturate(1.0 - 1.0 / doppler);
+                    
+                    half3x3 M_blue = half3x3(
+                        1.0 - s, 0.0,     0.0,
+                        s,       1.0 - s, 0.0,
+                        s * 0.5, s,       1.0
+                    );
+                    col = mul(M_blue, rgb);
+                    
+                    // Desaturate at higher blueshifts to represent ultraviolet white glow
+                    col = lerp(col, dot(col, half3(0.299, 0.587, 0.114)), s * 0.5);
+                }
+                else
+                {
+                    // Redshift: Maps energy towards red
+                    half s = saturate(1.0 - doppler);
+                    
+                    half3x3 M_red = half3x3(
+                        1.0,     s,       s * 0.5,
+                        0.0,     1.0 - s, s,
+                        0.0,     0.0,     1.0 - s
+                    );
+                    col = mul(M_red, rgb);
+                }
+                
+                // Relativistic Beaming: power-of-three intensity scaling
+                float beaming = pow(max(doppler, 0.0001), 3.0);
+                return col * (half)beaming;
             }
             
             v2f vert(appdata v)
@@ -257,6 +296,14 @@ Shader "DarkRelativity/Wormhole"
                 // Smooth threshold blend between Inside and Outside
                 float insideFactor = 1.0 - smoothstep(theta_H - _EdgeBlendWidth, theta_H + _EdgeBlendWidth, theta);
                 finalColor.rgb = lerp(col_Outside, col_Inside, insideFactor);
+                
+                // Unified Time Dilation Doppler Shift
+                // The shift is localized to the event horizon (theta == theta_H) and decays away from it.
+                float falloff = (theta <= theta_H) ? (theta / max(theta_H, 0.0001)) : (theta_H / max(theta, 0.0001));
+                float dilationFalloff = pow(saturate(falloff), 4.0);
+                float dopplerFactor = exp(_TimeDilationShift * dilationFalloff);
+                finalColor.rgb = ApplyBackgroundDoppler(finalColor.rgb, dopplerFactor);
+                
                 finalColor.a = edgeFade;
                 
                 return finalColor;
