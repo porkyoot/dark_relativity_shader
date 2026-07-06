@@ -17,8 +17,7 @@ Shader "DarkRelativity/Wormhole"
         _EdgeBlendWidth("Edge Blend Width", Range(0.001, 0.2)) = 0.05
         
         [Header(Advanced Calibration Settings)]
-        _HorizonLensingLimit("Horizon Lensing Limit", Range(0.5, 0.99)) = 0.85
-        _MaxDeflectionAngle("Max Deflection Angle (Rad)", Range(1.0, 10.0)) = 3.77
+        _MaxRings("Max Light Repeats (Rings)", Range(0.0, 20.0)) = 3.0
         _ScreenBorderBlendWidth("Screen Border Blend Width", Range(0.01, 0.5)) = 0.15
         
         [Header(Fallback Environment)]
@@ -89,8 +88,7 @@ Shader "DarkRelativity/Wormhole"
             float _InnerCurvePower;
             float _EdgeBlendWidth;
             
-            float _HorizonLensingLimit;
-            float _MaxDeflectionAngle;
+            float _MaxRings;
             float _ScreenBorderBlendWidth;
             
             inline float3 GetEyePos()
@@ -184,11 +182,10 @@ Shader "DarkRelativity/Wormhole"
                 // Linear mapping for the clear window in the center
                 float baseMapping = normalizedTheta * 3.1415926535 * _InnerRefraction;
                 
-                // Asymptotic function that goes to infinity at the edge
-                float distBase_Inner = normalizedTheta / max(1.0 - normalizedTheta, 0.0001);
-                float infiniteRings = _InnerCurvePower * pow(distBase_Inner, _DistortionPower);
+                // Scaled power curve to guarantee exactly _MaxRings at the horizon without clipping
+                float ringMapping = pow(normalizedTheta, _InnerCurvePower) * (_MaxRings * 6.283185307);
                 
-                float theta_out = baseMapping + infiniteRings;
+                float theta_out = baseMapping + ringMapping;
                 
                 float3 ray_Wormhole = singularityDir * cos(theta_out) + perpendicular * sin(theta_out);
                 
@@ -205,12 +202,11 @@ Shader "DarkRelativity/Wormhole"
                     fade = saturate((theta_mesh - theta) / max(theta_mesh * 0.15, 0.0001));
                 }
                 
-                // Exact asymptote at the horizon for infinite outer rings
-                float distBase = theta_H / max(theta - theta_H, 0.0001);
-                float oppositeFade = cos(theta * 0.5);
-                float distFactor = _DistortionStrength * pow(distBase, _DistortionPower) * fade * oppositeFade;
+                // Normalized coordinate: 1.0 at the horizon, falling off as 1/r
+                float outerNorm = saturate(theta_H / max(theta, 0.0001));
                 
-                // Allow distFactor to go to infinity (remove _MaxDeflectionAngle cap)
+                // Scaled power curve ensures exactly _MaxRings at the horizon
+                float distFactor = pow(outerNorm, _DistortionPower) * (_MaxRings * 6.283185307) * fade;
                 
                 float theta_Lensed = theta - theta_H * distFactor;
                 float3 ray_Lensed = singularityDir * cos(theta_Lensed) + perpendicular * sin(theta_Lensed);
