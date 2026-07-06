@@ -9,11 +9,12 @@ Shader "DarkRelativity/BlackHole_Quest"
         _DistortionStrength("Lensing Strength", Range(0.1, 15.0)) = 1.0
         _DistortionPower("Lensing Falloff (Fast)", Range(0.5, 3.0)) = 1.2
         
-        [Header(Rotation and Redshift Settings)]
-        _RotationSpeed("Rotation Speed & Dir (+-)", Float) = 0.5
-        _RedshiftFactor("Redshift Factor", Range(0.0, 5.0)) = 1.5
+        [Header(Relativistic Physics Settings)]
+        _SpeedOfLight("Speed of Light (c)", Float) = 100.0
+        _RotationVelocity("Rotation Velocity (+-)", Float) = 50.0
         
-        [Header(Gravitational Redshift Fringe)]
+        [Header(Thermodynamics and Fringe)]
+        _BaseTemperature("Base Plasma Temp (K)", Range(1000, 15000)) = 6500.0
         _FringeWidth("Fringe Width", Range(0.0, 0.5)) = 0.08
         _FringeStrength("Fringe Strength", Range(0, 10)) = 3.0
     }
@@ -153,8 +154,7 @@ Shader "DarkRelativity/BlackHole_Quest"
                             float fringeFactor = smoothstep(fringeOut, fringeIn, r) * edgeFade;
                             
                             // Procedural Doppler color shift for the fringe
-                            float3 baseColor = float3(1.0, 0.45, 0.12); // Orange base
-                            float3 fringeColor = GetFringeColor(baseColor, doppler);
+                            float3 fringeColor = GetFringeColor(doppler);
                             
                             // Relativistic Beaming
                             float beaming = pow(max(doppler, 0.0001), 3.0);

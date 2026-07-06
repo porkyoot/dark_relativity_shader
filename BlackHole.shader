@@ -10,11 +10,12 @@ Shader "DarkRelativity/BlackHole"
         _DistortionPower("Lensing Falloff (Fast)", Range(0.5, 3.0)) = 1.2
         _ChromaticAberration("Chromatic Aberration", Range(0.0, 0.3)) = 0.05
         
-        [Header(Rotation and Redshift Settings)]
-        _RotationSpeed("Rotation Speed & Dir (+-)", Float) = 0.5
-        _RedshiftFactor("Redshift Factor", Range(0.0, 5.0)) = 1.5
+        [Header(Relativistic Physics Settings)]
+        _SpeedOfLight("Speed of Light (c)", Float) = 100.0
+        _RotationVelocity("Rotation Velocity (+-)", Float) = 50.0
         
-        [Header(Gravitational Redshift Fringe)]
+        [Header(Thermodynamics and Fringe)]
+        _BaseTemperature("Base Plasma Temp (K)", Range(1000, 15000)) = 6500.0
         _FringeWidth("Fringe Width", Range(0.0, 0.5)) = 0.08
         _FringeStrength("Fringe Strength", Range(0, 10)) = 3.0
         
@@ -25,7 +26,6 @@ Shader "DarkRelativity/BlackHole"
         _HorizonLensingLimit("Horizon Lensing Limit", Range(0.5, 0.99)) = 0.85
         _MaxDeflectionAngle("Max Deflection Angle (Rad)", Range(1.0, 10.0)) = 3.77
         _ScreenBorderBlendWidth("Screen Border Blend Width", Range(0.01, 0.5)) = 0.15
-        _FringeBaseColor("Fringe Base Color", Color) = (1.0, 0.45, 0.12, 1.0)
     }
     
     SubShader
@@ -264,8 +264,7 @@ Shader "DarkRelativity/BlackHole"
                         if (_FringeWidth > 0.0 && cosTheta > fringeOut)
                         {
                             float fringeFactor = smoothstep(fringeOut, fringeIn, cosTheta) * edgeFade;
-                            float3 baseColor = float3(1.0, 0.45, 0.12);
-                            float3 fringeColor = GetFringeColor(baseColor, doppler);
+                            float3 fringeColor = GetFringeColor(doppler);
                             float beaming = pow(max(doppler, 0.0001), 3.0);
                             float3 fringeGlow = fringeColor * fringeFactor * _FringeStrength * beaming;
                             finalColor.rgb = lerp(finalColor.rgb, finalColor.rgb + fringeGlow, fringeFactor);
