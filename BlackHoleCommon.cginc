@@ -27,8 +27,9 @@ float _RealRadius;
 float _DistortionStrength;
 float _DistortionPower;
 float _ChromaticAberration;
-float _RotationSpeed;
-float _RedshiftFactor;
+float _SpeedOfLight;
+float _RotationVelocity;
+float _BaseTemperature;
 float _FringeWidth;
 float _FringeStrength;
 float _UseDepthOcclusion;
@@ -37,7 +38,6 @@ float _UseDepthOcclusion;
 float _HorizonLensingLimit;
 float _MaxDeflectionAngle;
 float _ScreenBorderBlendWidth;
-float4 _FringeBaseColor;
 
 inline float3 GetEyePos()
 {
@@ -74,11 +74,13 @@ inline float GetUnifiedDoppler(float3 rayDir, float3 singularityDir, float3 perp
 {
     float cosTheta = dot(rayDir, singularityDir); // 1.0 when looking straight at center, -1.0 when looking away
     
-    // Gravitational redshift scales with the gravitational potential Rs / D
-    float gravityStrength = worldRs / max(distToCenter, 0.0001);
+    // Gravitational potential scaled by Speed of Light relative to default (100.0)
+    float c = max(_SpeedOfLight, 0.001);
+    float gravPotential = worldRs / max(distToCenter, 0.0001);
+    float z_g = gravPotential * (100.0 / c);
     
-    // Gravitational shift: looking away (cosTheta < 0) yields blue shift; looking inward (cosTheta > 0) yields redshift
-    float gravShift = - cosTheta * gravityStrength * _RedshiftFactor;
+    // Directional component: looking inward creates redshift (D < 1), looking outward creates blueshift (D > 1)
+    float D_grav = exp(-cosTheta * z_g);
     
     // Rotational frame-dragging shift: Local Y axis of the mesh is the spin axis
     float3 localY = normalize(float3(unity_ObjectToWorld._m01, unity_ObjectToWorld._m11, unity_ObjectToWorld._m21));
@@ -100,10 +102,19 @@ inline float GetUnifiedDoppler(float3 rayDir, float3 singularityDir, float3 perp
     float theta_H = acos(clamp(cosTheta_H, -1.0, 1.0));
     
     float angleDecay = pow(max(theta_H, 0.0001) / max(theta, 0.0001), 3.0);
-    float spinShift = dot(perpendicular, spinDir) * _RotationSpeed * gravityStrength * angleDecay;
     
-    // Exponential mapping of total shift (Doppler factor)
-    return exp(gravShift + spinShift);
+    // Velocity of rotation at this position
+    float R = max(distToCenter, 0.0001);
+    float v = _RotationVelocity * angleDecay * (worldRs / R);
+    
+    // Relativistic Doppler from rotation
+    float v_proj = dot(perpendicular, spinDir) * v;
+    float beta = clamp(v_proj / c, -0.999, 0.999);
+    
+    // Doppler shift formula: D = sqrt((1 + beta) / (1 - beta))
+    float spinDopplerFactor = sqrt((1.0 + beta) / (1.0 - beta));
+    
+    return D_grav * spinDopplerFactor;
 }
 
 inline float3 RGBtoHSV(float3 c)
@@ -124,16 +135,33 @@ inline float3 HSVtoRGB(float3 c)
     return c.z * lerp(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
 }
 
-inline float3 GetFringeColor(float3 baseColor, float doppler)
+inline float3 BlackbodyColor(float temp)
 {
-    if (doppler > 1.0)
-    {
-        return lerp(baseColor, float3(0.35, 0.65, 1.0), saturate((doppler - 1.0) * _RedshiftFactor));
-    }
-    else
-    {
-        return lerp(baseColor, float3(1.0, 0.02, 0.0), saturate((1.0 - doppler) * _RedshiftFactor));
-    }
+    // Fast approximation for Blackbody Color Temperature to RGB
+    temp = clamp(temp, 1000.0, 40000.0) / 100.0;
+    float3 color;
+    
+    // Red
+    if (temp <= 66.0) color.r = 255.0;
+    else color.r = 329.698727446 * pow(temp - 60.0, -0.1332047592);
+    
+    // Green
+    if (temp <= 66.0) color.g = 99.4708025861 * log(temp) - 161.1195681661;
+    else color.g = 288.1221695283 * pow(temp - 60.0, -0.0755148492);
+    
+    // Blue
+    if (temp >= 66.0) color.b = 255.0;
+    else if (temp <= 19.0) color.b = 0.0;
+    else color.b = 138.5177312231 * log(temp - 10.0) - 305.0447927307;
+    
+    return saturate(color / 255.0);
+}
+
+inline float3 GetFringeColor(float doppler)
+{
+    // Doppler scales the temperature directly (Wien's displacement law)
+    float shiftedTemp = _BaseTemperature * doppler;
+    return BlackbodyColor(shiftedTemp);
 }
 
 inline float3 ApplyBackgroundDoppler(float3 rgb, float doppler)
@@ -142,10 +170,9 @@ inline float3 ApplyBackgroundDoppler(float3 rgb, float doppler)
     
     if (doppler > 1.0)
     {
-        // Exponential blueshift interpolation for vivid color progression
-        float s = saturate(1.0 - exp(-(doppler - 1.0) * _RedshiftFactor));
+        // Blueshift: Maps energy towards blue
+        float s = saturate(1.0 - 1.0 / doppler);
         
-        // Blueshift matrix: shifts wavelengths towards blue (Red -> Green -> Blue)
         float3x3 M_blue = float3x3(
             1.0 - s, 0.0,     0.0,
             s,       1.0 - s, 0.0,
@@ -158,10 +185,9 @@ inline float3 ApplyBackgroundDoppler(float3 rgb, float doppler)
     }
     else
     {
-        // Exponential redshift interpolation for vivid color progression
-        float s = saturate(1.0 - exp(-(1.0 - doppler) * _RedshiftFactor));
+        // Redshift: Maps energy towards red
+        float s = saturate(1.0 - doppler);
         
-        // Redshift matrix: shifts wavelengths towards red (Blue -> Green -> Red)
         float3x3 M_red = float3x3(
             1.0,     s,       s * 0.5,
             0.0,     1.0 - s, s,

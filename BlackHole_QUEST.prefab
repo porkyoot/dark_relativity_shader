@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 2463577300201585785}
   - component: {fileID: 3375912053518734307}
   m_Layer: 0
-  m_Name: BlackHole
+  m_Name: BlackHole_QUEST
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -66,7 +66,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 10abd600af55731aaab2c025c59a2bc5, type: 2}
+  - {fileID: 2100000, guid: 45cf06a07df09d58dab3549ce8f9fb3d, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -202,8 +202,8 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.33744204, y: 0.33744204, z: 0.33744204}
-  m_ConstrainProportionsScale: 0
+  m_LocalScale: {x: 0.52, y: 0.52, z: 0.52}
+  m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 7588482321980294179}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -379,8 +379,8 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.33744204, y: 0.33744204, z: 0.33744204}
-  m_ConstrainProportionsScale: 0
+  m_LocalScale: {x: 0.52, y: 0.52, z: 0.52}
+  m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 7588482321980294179}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}

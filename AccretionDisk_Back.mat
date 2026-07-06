@@ -7,17 +7,19 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: BlackHole
-  m_Shader: {fileID: 4800000, guid: 3cee37b861e3206b792ab0cfe7cc3939, type: 3}
+  m_Name: AccretionDisk_Back
+  m_Shader: {fileID: 4800000, guid: 8b39b95ac85682040beff730e0cfc77a, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
   m_InvalidKeywords:
+  - _ALPHATEST_ON
   - _EMISSION
-  m_LightmapFlags: 0
-  m_EnableInstancingVariants: 1
+  - _ENABLE_GEOMETRIC_SPECULAR_AA
+  m_LightmapFlags: 2
+  m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
-  m_CustomRenderQueue: -1
+  m_CustomRenderQueue: 3000
   stringTagMap: {}
   disabledShaderPasses: []
   m_LockedProperties: 
@@ -44,12 +46,8 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
-    - _GrabTexture:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
     - _MainTex:
-        m_Texture: {fileID: 0}
+        m_Texture: {fileID: 2800000, guid: 0157e40a63d35a4188989060e26f6485, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _MetallicGlossMap:
@@ -64,47 +62,35 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
-    - _SkyboxCubemap:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _BaseTemperature: 6000
+    - _Bicubic: 0
+    - _Brightness: 1
     - _BumpScale: 1
-    - _ChromaticAberration: 0.057
     - _Cutoff: 0.5
     - _DetailNormalMapScale: 1
-    - _DistortionPower: 1.2
-    - _DistortionStrength: 1
     - _DstBlend: 0
-    - _FringeStrength: 1.52
-    - _FringeWidth: 0.197
+    - _EnableGeometricSpecularAA: 1
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
-    - _HorizonLensingLimit: 0.85
-    - _MaxDeflectionAngle: 3.77
+    - _LightmapType: 0
     - _Metallic: 0
-    - _Mode: 0
+    - _Mode: 1
     - _OcclusionStrength: 1
     - _Parallax: 0.02
-    - _RealRadius: 0.15
-    - _RedshiftFactor: 0.66
+    - _RedshiftFactor: 1.5
     - _RotationSpeed: 0.5
-    - _RotationVelocity: 200
-    - _ScreenBorderBlendWidth: 0.15
     - _SmoothnessTextureChannel: 0
+    - _SpecularAAScreenSpaceVariance: 0.1
+    - _SpecularAAThreshold: 0.2
     - _SpecularHighlights: 1
-    - _SpeedOfLight: 100
     - _SrcBlend: 1
+    - _TextureScrollSpeed: 0.25
     - _UVSec: 0
-    - _UseCustomSkybox: 0
-    - _UseDepthOcclusion: 0
+    - _VelocityScale: 0.5
     - _ZWrite: 1
     m_Colors:
     - _Color: {r: 1, g: 1, b: 1, a: 1}
-    - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
-    - _FringeBaseColor: {r: 0.25943398, g: 0.638714, b: 1, a: 1}
-    - _RotationAxis: {r: 0, g: 1, b: 0, a: 0}
+    - _EmissionColor: {r: 0.6698113, g: 0.6698113, b: 0.6698113, a: 1}
   m_BuildTextureStacks: []
