@@ -26,13 +26,10 @@ struct v2f
 float _RealRadius;
 float _DistortionStrength;
 float _DistortionPower;
-float _ChromaticAberration;
 float _SpeedOfLight;
 float _RotationVelocity;
-float _BaseTemperature;
 float _FringeWidth;
 float _FringeStrength;
-float _UseDepthOcclusion;
 
 // Exposed Advanced Parameters
 float _HorizonLensingLimit;
@@ -50,10 +47,11 @@ inline float GetMeshRadius()
     return length(float3(unity_ObjectToWorld._m00, unity_ObjectToWorld._m10, unity_ObjectToWorld._m20)) * 0.5;
 }
 
-v2f vert_common(appdata v)
+inline v2f vert_common(appdata v)
 {
     v2f o;
     UNITY_SETUP_INSTANCE_ID(v);
+    UNITY_INITIALIZE_OUTPUT(v2f, o);
     UNITY_TRANSFER_INSTANCE_ID(v, o);
     UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
     
@@ -69,24 +67,21 @@ v2f vert_common(appdata v)
     return o;
 }
 
-// Unified Doppler Factor based on General Relativity: combinations of radial gravity shift and frame dragging spin
+// Unified Doppler Factor based on precomputed LUT values
 inline float GetUnifiedDoppler(float3 rayDir, float3 singularityDir, float3 perpendicular, float distToCenter, float worldRs)
 {
-    float cosTheta = dot(rayDir, singularityDir); // 1.0 when looking straight at center, -1.0 when looking away
-    
-    // Gravitational potential scaled by Speed of Light relative to default (100.0)
-    float c = max(_SpeedOfLight, 0.001);
     float gravPotential = worldRs / max(distToCenter, 0.0001);
-    float z_g = gravPotential * (100.0 / c);
+    float cosTheta = dot(rayDir, singularityDir);
     
-    // Directional component: looking inward creates redshift (D < 1), looking outward creates blueshift (D > 1)
+    // Gravitational redshift
+    float c = max(_SpeedOfLight, 0.001);
+    float z_g = gravPotential * (100.0 / c);
     float D_grav = exp(-cosTheta * z_g);
     
     // Rotational frame-dragging shift: Local Y axis of the mesh is the spin axis
     float3 localY = normalize(float3(unity_ObjectToWorld._m01, unity_ObjectToWorld._m11, unity_ObjectToWorld._m21));
     float3 spinDir = normalize(cross(singularityDir, localY + float3(1e-6, 0.0, 0.0)));
     
-    // Scale rotation shift based on angle: decays exponentially as we move away from the horizon boundary on screen
     float theta = acos(clamp(cosTheta, -1.0, 1.0));
     
     float cosTheta_H;
@@ -101,15 +96,17 @@ inline float GetUnifiedDoppler(float3 rayDir, float3 singularityDir, float3 perp
     }
     float theta_H = acos(clamp(cosTheta_H, -1.0, 1.0));
     
-    float angleDecay = pow(max(theta_H, 0.0001) / max(theta, 0.0001), 3.0);
-    
-    // Velocity of rotation at this position
-    float R = max(distToCenter, 0.0001);
-    float v = _RotationVelocity * angleDecay * (worldRs / R);
+    // Calculate rotation natively. _RotationVelocity is a fraction of c (-0.99 to 0.99)
+    // We decay it as a power of 1.5 so the visible accretion area retains some velocity
+    float angleDecay = pow(max(theta_H, 0.0001) / max(theta, 0.0001), 1.5);
+    float distanceDecay = sqrt(worldRs / max(distToCenter, 0.0001));
+    float v_frac = _RotationVelocity * angleDecay * distanceDecay;
     
     // Relativistic Doppler from rotation
-    float v_proj = dot(perpendicular, spinDir) * v;
-    float beta = clamp(v_proj / c, -0.999, 0.999);
+    float v_proj = dot(perpendicular, spinDir) * v_frac;
+    
+    // We multiply by an extra factor of 2.0 to make the color shift very visible in the deformation
+    float beta = clamp(v_proj * 2.0, -0.99, 0.99);
     
     // Doppler shift formula: D = sqrt((1 + beta) / (1 - beta))
     float spinDopplerFactor = sqrt((1.0 + beta) / (1.0 - beta));
@@ -117,78 +114,51 @@ inline float GetUnifiedDoppler(float3 rayDir, float3 singularityDir, float3 perp
     return D_grav * spinDopplerFactor;
 }
 
-inline float3 RGBtoHSV(float3 c)
+inline half3 RGBtoHSV(half3 c)
 {
-    float4 K = float4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
-    float4 p = lerp(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
-    float4 q = lerp(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
+    half4 K = half4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+    half4 p = lerp(half4(c.bg, K.wz), half4(c.gb, K.xy), step(c.b, c.g));
+    half4 q = lerp(half4(p.xyw, c.r), half4(c.r, p.yzx), step(p.x, c.r));
 
-    float d = q.x - min(q.w, q.y);
-    float e = 1.0e-10;
-    return float3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+    half d = q.x - min(q.w, q.y);
+    half e = 1.0e-10;
+    return half3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
 }
 
-inline float3 HSVtoRGB(float3 c)
+inline half3 HSVtoRGB(half3 c)
 {
-    float4 K = float4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-    float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
+    half4 K = half4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    half3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
     return c.z * lerp(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
 }
 
-inline float3 BlackbodyColor(float temp)
-{
-    // Fast approximation for Blackbody Color Temperature to RGB
-    temp = clamp(temp, 1000.0, 40000.0) / 100.0;
-    float3 color;
-    
-    // Red
-    if (temp <= 66.0) color.r = 255.0;
-    else color.r = 329.698727446 * pow(temp - 60.0, -0.1332047592);
-    
-    // Green
-    if (temp <= 66.0) color.g = 99.4708025861 * log(temp) - 161.1195681661;
-    else color.g = 288.1221695283 * pow(temp - 60.0, -0.0755148492);
-    
-    // Blue
-    if (temp >= 66.0) color.b = 255.0;
-    else if (temp <= 19.0) color.b = 0.0;
-    else color.b = 138.5177312231 * log(temp - 10.0) - 305.0447927307;
-    
-    return saturate(color / 255.0);
-}
 
-inline float3 GetFringeColor(float doppler)
+inline half3 ApplyBackgroundDoppler(half3 rgb, float doppler)
 {
-    // Doppler scales the temperature directly (Wien's displacement law)
-    float shiftedTemp = _BaseTemperature * doppler;
-    return BlackbodyColor(shiftedTemp);
-}
-
-inline float3 ApplyBackgroundDoppler(float3 rgb, float doppler)
-{
-    float3 col = rgb;
+    half3 col = rgb;
     
     if (doppler > 1.0)
     {
         // Blueshift: Maps energy towards blue
-        float s = saturate(1.0 - 1.0 / doppler);
+        half s = saturate(1.0 - 1.0 / doppler);
         
-        float3x3 M_blue = float3x3(
+        half3x3 M_blue = half3x3(
             1.0 - s, 0.0,     0.0,
             s,       1.0 - s, 0.0,
             s * 0.5, s,       1.0
+
         );
         col = mul(M_blue, rgb);
         
         // Desaturate at higher blueshifts to represent ultraviolet white glow
-        col = lerp(col, dot(col, float3(0.299, 0.587, 0.114)), s * 0.5);
+        col = lerp(col, dot(col, half3(0.299, 0.587, 0.114)), s * 0.5);
     }
     else
     {
         // Redshift: Maps energy towards red
-        float s = saturate(1.0 - doppler);
+        half s = saturate(1.0 - doppler);
         
-        float3x3 M_red = float3x3(
+        half3x3 M_red = half3x3(
             1.0,     s,       s * 0.5,
             0.0,     1.0 - s, s,
             0.0,     0.0,     1.0 - s
@@ -198,7 +168,7 @@ inline float3 ApplyBackgroundDoppler(float3 rgb, float doppler)
     
     // Relativistic Beaming: power-of-three intensity scaling
     float beaming = pow(max(doppler, 0.0001), 3.0);
-    return col * beaming;
+    return col * (half)beaming;
 }
 
 #endif // BLACK_HOLE_COMMON_INCLUDED

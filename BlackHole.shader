@@ -8,20 +8,16 @@ Shader "DarkRelativity/BlackHole"
         [Header(Fast Lensing Settings)]
         _DistortionStrength("Lensing Strength", Range(0.1, 15.0)) = 1.0
         _DistortionPower("Lensing Falloff (Fast)", Range(0.5, 3.0)) = 1.2
-        _ChromaticAberration("Chromatic Aberration", Range(0.0, 0.3)) = 0.05
         
         [Header(Relativistic Physics Settings)]
         _SpeedOfLight("Speed of Light (c)", Float) = 100.0
         _RotationVelocity("Rotation Velocity (+-)", Float) = 50.0
         
         [Header(Thermodynamics and Fringe)]
-        _BaseTemperature("Base Plasma Temp (K)", Range(1000, 15000)) = 6500.0
         _FringeWidth("Fringe Width", Range(0.0, 0.5)) = 0.08
         _FringeStrength("Fringe Strength", Range(0, 10)) = 3.0
         
-        [Header(Depth Occlusion Settings)]
-        [Toggle] _UseDepthOcclusion("Use Depth Occlusion", Float) = 0
-        
+
         [Header(Advanced Calibration Settings)]
         _HorizonLensingLimit("Horizon Lensing Limit", Range(0.5, 0.99)) = 0.85
         _MaxDeflectionAngle("Max Deflection Angle (Rad)", Range(1.0, 10.0)) = 3.77
@@ -40,9 +36,10 @@ Shader "DarkRelativity/BlackHole"
         
         GrabPass
         {
-            "_GrabTexture"
+            "_DarkRelativityGrab"
         }
         
+
         Pass
         {
             Tags { "LightMode" = "Always" }
@@ -58,9 +55,8 @@ Shader "DarkRelativity/BlackHole"
             
             #include "BlackHoleCommon.cginc"
             
-            UNITY_DECLARE_SCREENSPACE_TEXTURE(_GrabTexture);
-            float4 _GrabTexture_TexelSize;
-            UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
+            UNITY_DECLARE_SCREENSPACE_TEXTURE(_DarkRelativityGrab);
+            float4 _DarkRelativityGrab_TexelSize;
             
             v2f vert(appdata v)
             {
@@ -85,20 +81,14 @@ Shader "DarkRelativity/BlackHole"
                     discard;
                 }
                 
-                float2 screenUv = i.grabPos.xy / i.grabPos.w;
-                float rawDepth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, screenUv);
-                float sceneLinearDepth = LinearEyeDepth(rawDepth);
+
+
                 
-                // Occlusion des objets physiques de premier plan
-                if (_UseDepthOcclusion > 0.5 && distToCenter > meshRadius)
-                {
-                    if (sceneLinearDepth < i.grabPos.z)
-                    {
-                        discard;
-                    }
-                }
-                
-                float worldRs = meshRadius * saturate(_RealRadius / 0.5);
+                float3 localY = normalize(float3(unity_ObjectToWorld._m01, unity_ObjectToWorld._m11, unity_ObjectToWorld._m21));
+                float spinAlignment = dot(rayDir, localY);
+                // Squeeze the poles (flattening) proportional to rotation velocity
+                float squeeze = 1.0 - (spinAlignment * spinAlignment) * abs(_RotationVelocity) * 0.5;
+                float worldRs = meshRadius * saturate(_RealRadius / 0.5) * squeeze;
                 
                 // --- Calculs originaux de distorsion ---
                 float aspect = UNITY_MATRIX_P[1][1] / UNITY_MATRIX_P[0][0];
@@ -131,34 +121,7 @@ Shader "DarkRelativity/BlackHole"
                     cosTheta_H = - (1.0 - distToCenter / max(worldRs, 0.0001));
                 }
                 
-                bool occludedByScene = false;
-                float3 rayOrigin = eyePos;
-                float3 rayDirection = rayDir;
-                float3 centerToCam = rayOrigin - center;
-                
-                float B = dot(rayDirection, centerToCam);
-                float C = dot(centerToCam, centerToCam) - worldRs * worldRs;
-                float discriminant = B * B - C;
-                
-                if (_UseDepthOcclusion > 0.5 && discriminant >= 0.0)
-                {
-                    float t_horizon = -B - sqrt(discriminant);
-                    if (t_horizon > 0.0)
-                    {
-                        float3 intersectionPoint = rayOrigin + rayDirection * t_horizon;
-                        float4 horizonClipPos = UnityWorldToClipPos(intersectionPoint);
-                        float horizonDepth = horizonClipPos.z / horizonClipPos.w;
-                        #if defined(UNITY_REVERSED_Z)
-                        bool isFarPlane = (rawDepth <= 1e-5);
-                        occludedByScene = (rawDepth > horizonDepth) && !isFarPlane;
-                        #else
-                        bool isFarPlane = (rawDepth >= 0.99999);
-                        occludedByScene = (rawDepth < horizonDepth) && !isFarPlane;
-                        #endif
-                    }
-                }
-                
-                if (cosTheta > cosTheta_H && !occludedByScene)
+                if (cosTheta > cosTheta_H)
                 {
                     finalColor = fixed4(0, 0, 0, edgeFade);
                 }
@@ -171,8 +134,6 @@ Shader "DarkRelativity/BlackHole"
                     float3 perpVec = rayDir - singularityDir * cosTheta;
                     float perpLen = length(perpVec);
                     float3 perpendicular = (perpLen > 1e-5) ? (perpVec / perpLen) : float3(0.0, 0.0, 0.0);
-                    
-                    float doppler = GetUnifiedDoppler(rayDir, singularityDir, perpendicular, distToCenter, worldRs);
                     
                     float fade = 1.0;
                     if (distToCenter > meshRadius)
@@ -189,87 +150,52 @@ Shader "DarkRelativity/BlackHole"
                     
                     distFactor = min(distFactor, _MaxDeflectionAngle / max(theta_H, 0.0001));
                     
-                    float theta_R = theta - theta_H * distFactor * (1.0 + _ChromaticAberration * 0.5);
-                    float theta_G = theta - theta_H * distFactor;
-                    float theta_B = theta - theta_H * distFactor * (1.0 - _ChromaticAberration * 0.5);
-                    
-                    float3 ray_R = singularityDir * cos(theta_R) + perpendicular * sin(theta_R);
-                    float3 ray_G = singularityDir * cos(theta_G) + perpendicular * sin(theta_G);
-                    float3 ray_B = singularityDir * cos(theta_B) + perpendicular * sin(theta_B);
+                    float doppler = GetUnifiedDoppler(rayDir, singularityDir, perpendicular, distToCenter, worldRs);
+                    float theta_Lensed = theta - theta_H * distFactor;
+                    float3 ray_Lensed = singularityDir * cos(theta_Lensed) + perpendicular * sin(theta_Lensed);
                     
                     half3 col;
                     
                     if (distToCenter < worldRs)
                     {
-                        half4 probeColor_R = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_R, 0.0);
-                        half4 probeColor_G = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_G, 0.0);
-                        half4 probeColor_B = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_B, 0.0);
-                        
-                        col.r = DecodeHDR(probeColor_R, unity_SpecCube0_HDR).r;
-                        col.g = DecodeHDR(probeColor_G, unity_SpecCube0_HDR).g;
-                        col.b = DecodeHDR(probeColor_B, unity_SpecCube0_HDR).b;
-                        
+                        half4 probeColor = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_Lensed, 0.0);
+                        col = DecodeHDR(probeColor, unity_SpecCube0_HDR);
                         col = ApplyBackgroundDoppler(col, doppler);
                     }
                     else
                     {
-                        float3 proj_R = eyePos + (occludedByScene ? rayDir : ray_R) * distToCenter;
-                        float3 proj_G = eyePos + (occludedByScene ? rayDir : ray_G) * distToCenter;
-                        float3 proj_B = eyePos + (occludedByScene ? rayDir : ray_B) * distToCenter;
-                        
-                        float4 clip_R = UnityWorldToClipPos(proj_R);
-                        float4 clip_G = UnityWorldToClipPos(proj_G);
-                        float4 clip_B = UnityWorldToClipPos(proj_B);
-                        
-                        float2 uv_R = ComputeGrabScreenPos(clip_R).xy / max(clip_R.w, 0.0001);
-                        float2 uv_G = ComputeGrabScreenPos(clip_G).xy / max(clip_G.w, 0.0001);
-                        float2 uv_B = ComputeGrabScreenPos(clip_B).xy / max(clip_B.w, 0.0001);
+                        float3 proj_Lensed = eyePos + ray_Lensed * distToCenter;
+                        float4 clip_Lensed = UnityWorldToClipPos(proj_Lensed);
+                        float2 uv_Lensed = ComputeGrabScreenPos(clip_Lensed).xy / max(clip_Lensed.w, 0.0001);
                         
                         float blendW = max(_ScreenBorderBlendWidth, 0.02);
                         
-                        bool inBounds_R = all(uv_R > 0.0) && all(uv_R < 1.0) && (clip_R.w > 0.0);
-                        float2 distToEdge_R = min(uv_R, 1.0 - uv_R);
-                        float edgeDist_R = min(distToEdge_R.x, distToEdge_R.y);
-                        float blend_R = inBounds_R ? smoothstep(0.0, blendW, edgeDist_R) : 0.0;
-                        half3 grabCol_R = UNITY_SAMPLE_SCREENSPACE_TEXTURE(_GrabTexture, uv_R).rgb;
-                        half3 probeCol_R = DecodeHDR(UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_R, 0.0), unity_SpecCube0_HDR);
-                        col.r = lerp(probeCol_R.r, grabCol_R.r, blend_R);
+                        bool inBounds = all(uv_Lensed > 0.0) && all(uv_Lensed < 1.0) && (clip_Lensed.w > 0.0);
+                        float2 distToEdge = min(uv_Lensed, 1.0 - uv_Lensed);
+                        float edgeDist = min(distToEdge.x, distToEdge.y);
+                        float blend = inBounds ? smoothstep(0.0, blendW, edgeDist) : 0.0;
                         
-                        bool inBounds_G = all(uv_G > 0.0) && all(uv_G < 1.0) && (clip_G.w > 0.0);
-                        float2 distToEdge_G = min(uv_G, 1.0 - uv_G);
-                        float edgeDist_G = min(distToEdge_G.x, distToEdge_G.y);
-                        float blend_G = inBounds_G ? smoothstep(0.0, blendW, edgeDist_G) : 0.0;
-                        half3 grabCol_G = UNITY_SAMPLE_SCREENSPACE_TEXTURE(_GrabTexture, uv_G).rgb;
-                        half3 probeCol_G = DecodeHDR(UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_G, 0.0), unity_SpecCube0_HDR);
-                        col.g = lerp(probeCol_G.g, grabCol_G.g, blend_G);
+                        half3 grabCol = UNITY_SAMPLE_SCREENSPACE_TEXTURE(_DarkRelativityGrab, uv_Lensed).rgb;
+                        half3 probeCol = DecodeHDR(UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_Lensed, 0.0), unity_SpecCube0_HDR);
                         
-                        bool inBounds_B = all(uv_B > 0.0) && all(uv_B < 1.0) && (clip_B.w > 0.0);
-                        float2 distToEdge_B = min(uv_B, 1.0 - uv_B);
-                        float edgeDist_B = min(distToEdge_B.x, distToEdge_B.y);
-                        float blend_B = inBounds_B ? smoothstep(0.0, blendW, edgeDist_B) : 0.0;
-                        half3 grabCol_B = UNITY_SAMPLE_SCREENSPACE_TEXTURE(_GrabTexture, uv_B).rgb;
-                        half3 probeCol_B = DecodeHDR(UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_B, 0.0), unity_SpecCube0_HDR);
-                        col.b = lerp(probeCol_B.b, grabCol_B.b, blend_B);
-                        
+                        col = lerp(probeCol, grabCol, blend);
                         col = ApplyBackgroundDoppler(col, doppler);
                     }
                     
                     finalColor.rgb = col;
                     
-                    if (!occludedByScene)
-                    {
+
                         float fringeInTheta = theta_H;
                         float fringeOutTheta = theta_H * (1.0 + _FringeWidth);
                         
                         if (_FringeWidth > 0.0 && theta < fringeOutTheta)
                         {
-                            float fringeFactor = smoothstep(fringeOutTheta, fringeInTheta, theta) * edgeFade;
-                            float3 fringeColor = GetFringeColor(doppler);
-                            float beaming = pow(max(doppler, 0.0001), 3.0);
-                            float3 fringeGlow = fringeColor * fringeFactor * _FringeStrength * beaming;
-                            finalColor.rgb = lerp(finalColor.rgb, finalColor.rgb + fringeGlow, fringeFactor);
+                            half fringeFactor = (half)(smoothstep(fringeOutTheta, fringeInTheta, theta) * edgeFade);
+                            half beaming = (half)pow(max(doppler, 0.0001), 3.0);
+                            
+                            // Boost the intensity of the skybox/background sample
+                            finalColor.rgb *= (1.0 + fringeFactor * _FringeStrength * beaming);
                         }
-                    }
                     
                     finalColor.a = edgeFade;
                 }

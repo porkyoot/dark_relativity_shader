@@ -14,13 +14,10 @@ Shader "DarkRelativity/BlackHole_Quest"
         _RotationVelocity("Rotation Velocity (+-)", Float) = 50.0
         
         [Header(Thermodynamics and Fringe)]
-        _BaseTemperature("Base Plasma Temp (K)", Range(1000, 15000)) = 6500.0
         _FringeWidth("Fringe Width", Range(0.0, 0.5)) = 0.08
         _FringeStrength("Fringe Strength", Range(0, 10)) = 3.0
         
-        [Header(Depth Occlusion Settings)]
-        [Toggle] _UseDepthOcclusion("Use Depth Occlusion", Float) = 0
-        
+
         [Header(Advanced Calibration Settings)]
         _HorizonLensingLimit("Horizon Lensing Limit", Range(0.5, 0.99)) = 0.85
         _MaxDeflectionAngle("Max Deflection Angle (Rad)", Range(1.0, 10.0)) = 3.77
@@ -48,7 +45,7 @@ Shader "DarkRelativity/BlackHole_Quest"
             
             #include "BlackHoleCommon.cginc"
             
-            UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
+
             
             v2f vert(appdata v)
             {
@@ -85,8 +82,11 @@ Shader "DarkRelativity/BlackHole_Quest"
                 float2 V = (uv - centerUv) * aspectCorrect;
                 float r = length(V);
                 
-                // Scale-independent world event horizon radius
-                float worldRs = meshRadius * saturate(_RealRadius / 0.5);
+                float3 localY = normalize(float3(unity_ObjectToWorld._m01, unity_ObjectToWorld._m11, unity_ObjectToWorld._m21));
+                float spinAlignment = dot(rayDir, localY);
+                // Squeeze the poles (flattening) proportional to rotation velocity
+                float squeeze = 1.0 - (spinAlignment * spinAlignment) * abs(_RotationVelocity) * 0.5;
+                float worldRs = meshRadius * saturate(_RealRadius / 0.5) * squeeze;
                 
                 // Calculate VR-safe screen-space radii mathematically using focal length
                 float F = UNITY_MATRIX_P[1][1] * 0.5;
@@ -102,17 +102,6 @@ Shader "DarkRelativity/BlackHole_Quest"
                 float3 singularityDir = normalize(center - eyePos);
                 float cosTheta = dot(rayDir, singularityDir); // 1.0 when looking straight at center, -1.0 when looking away
                 
-                // Depth Occlusion Sampling
-                float screenRawDepth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv);
-                float sceneLinearDepth = LinearEyeDepth(screenRawDepth);
-                
-                if (_UseDepthOcclusion > 0.5 && distToCenter > meshRadius)
-                {
-                    if (sceneLinearDepth < i.grabPos.z)
-                    {
-                        discard;
-                    }
-                }
                 
                 // Compute Schwarzschild Horizon Boundary continuous across event horizon boundary
                 float cosTheta_H;
@@ -127,42 +116,10 @@ Shader "DarkRelativity/BlackHole_Quest"
                     cosTheta_H = - (1.0 - distToCenter / max(worldRs, 0.0001));
                 }
                 
-                bool occludedByScene = false;
-                float3 rayOrigin = eyePos;
-                float3 rayDirection = rayDir;
-                float3 centerToCam = rayOrigin - center;
-                
-                float B = dot(rayDirection, centerToCam);
-                float C = dot(centerToCam, centerToCam) - worldRs * worldRs;
-                float discriminant = B * B - C;
-                
-                if (_UseDepthOcclusion > 0.5 && discriminant >= 0.0)
-                {
-                    float t_horizon = -B - sqrt(discriminant);
-                    if (t_horizon > 0.0)
-                    {
-                        float3 intersectionPoint = rayOrigin + rayDirection * t_horizon;
-                        float4 horizonClipPos = UnityWorldToClipPos(intersectionPoint);
-                        float horizonDepth = horizonClipPos.z / horizonClipPos.w;
-                        #if defined(UNITY_REVERSED_Z)
-                        bool isFarPlane = (screenRawDepth <= 1e-5);
-                        occludedByScene = (screenRawDepth > horizonDepth) && !isFarPlane;
-                        #else
-                        bool isFarPlane = (screenRawDepth >= 0.99999);
-                        occludedByScene = (screenRawDepth < horizonDepth) && !isFarPlane;
-                        #endif
-                    }
-                }
-                
-                if (cosTheta > cosTheta_H && !occludedByScene)
+                if (cosTheta > cosTheta_H)
                 {
                     // Event Horizon (completely dark)
                     finalColor = fixed4(0, 0, 0, edgeFade);
-                }
-                else if (occludedByScene)
-                {
-                    // If occluded, do not render reflection probe or fringe over the opaque scene
-                    finalColor = fixed4(0, 0, 0, 0);
                 }
                 else
                 {
@@ -171,11 +128,10 @@ Shader "DarkRelativity/BlackHole_Quest"
                     float perpLen = length(perpVec);
                     float3 perpendicular = (perpLen > 1e-5) ? (perpVec / perpLen) : float3(0.0, 0.0, 0.0);
                     
-                    // Compute Unified Doppler Factor
-                    float doppler = GetUnifiedDoppler(rayDir, singularityDir, perpendicular, distToCenter, worldRs);
-                    
                     float theta = acos(clamp(cosTheta, -1.0, 1.0));
                     float theta_H = acos(clamp(cosTheta_H, -1.0, 1.0));
+                    
+                    float doppler = GetUnifiedDoppler(rayDir, singularityDir, perpendicular, distToCenter, worldRs);
                     
                     float fade = 1.0;
                     if (distToCenter > meshRadius)
@@ -210,12 +166,11 @@ Shader "DarkRelativity/BlackHole_Quest"
                         
                         if (_FringeWidth > 0.0 && theta < fringeOutTheta)
                         {
-                            float fringeFactor = smoothstep(fringeOutTheta, fringeInTheta, theta) * edgeFade;
-                            float3 fringeColor = GetFringeColor(doppler);
-                            float beaming = pow(max(doppler, 0.0001), 3.0);
-                            float3 fringeGlow = fringeColor * fringeFactor * _FringeStrength * beaming;
+                            half fringeFactor = (half)(smoothstep(fringeOutTheta, fringeInTheta, theta) * edgeFade);
+                            half beaming = (half)pow(max(doppler, 0.0001), 3.0);
                             
-                            finalColor.rgb = lerp(finalColor.rgb, finalColor.rgb + fringeGlow, fringeFactor);
+                            // Boost the intensity of the skybox/background sample
+                            finalColor.rgb *= (1.0 + fringeFactor * _FringeStrength * beaming);
                         }
                     }
                     
