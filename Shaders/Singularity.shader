@@ -210,6 +210,10 @@ Shader "DarkRelativity/Singularity"
                     {
                         universeId = 0.0;
                     }
+                    else
+                    {
+                        universeId = 0.5;
+                    }
                     #endif
                     
                     // Mesh-edge blend: smoothly fade deflection to 0 at the mesh boundary
