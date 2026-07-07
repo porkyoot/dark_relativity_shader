@@ -205,6 +205,13 @@ Shader "DarkRelativity/Singularity"
                         #endif
                     }
                     
+                    #if defined(_ANALYTICMETRIC_BLACKHOLE)
+                    if (cosTheta > cosTheta_H)
+                    {
+                        universeId = 0.0;
+                    }
+                    #endif
+                    
                     // Mesh-edge blend: smoothly fade deflection to 0 at the mesh boundary
                     // This guarantees zero deformation at the sphere surface regardless of LUT precision.
                     float meshBlend = 1.0;

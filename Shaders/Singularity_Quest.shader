@@ -197,6 +197,13 @@ Shader "DarkRelativity/Singularity (Quest)"
                         #endif
                     }
                     
+                    #if defined(_ANALYTICMETRIC_BLACKHOLE)
+                    if (cosTheta > cosTheta_H)
+                    {
+                        universeId = 0.0;
+                    }
+                    #endif
+                    
                     // Mesh-edge blend: smoothly fade deflection to 0 at the mesh boundary
                     float meshBlend = 1.0;
                     if (distToCenter > meshRadius)

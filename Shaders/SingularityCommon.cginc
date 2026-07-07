@@ -142,9 +142,10 @@ inline float GetUnifiedDoppler(float3 rayDir, float3 singularityDir, float3 perp
     
     // Calculate rotation natively. _RotationVelocity is a fraction of c (-0.99 to 0.99)
     // We decay it as a power of 1.5 so the visible accretion area retains some velocity
-    float angleDecay = pow(max(theta_H, 0.0001) / max(theta, 0.0001), 1.5);
+    float angleDecay = pow(saturate(theta_H / max(theta, 0.0001)), 1.5);
     float distanceDecay = sqrt(worldRs / max(distToCenter, 0.0001));
-    float v_frac = _RotationVelocity * angleDecay * distanceDecay;
+    float perpLen = sqrt(max(0.0, 1.0 - cosTheta * cosTheta));
+    float v_frac = _RotationVelocity * angleDecay * distanceDecay * perpLen;
     
     // Relativistic Doppler from rotation
     float v_proj = dot(perpendicular, spinDir) * v_frac;
