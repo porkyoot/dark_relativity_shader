@@ -10,6 +10,7 @@ Shader "DarkRelativity/Singularity"
         _DistortionStrength("Lensing Strength", Range(0.1, 15.0)) = 1.0
         _DistortionPower("Lensing Falloff", Range(0.5, 3.0)) = 1.2
         _ScreenBorderBlendWidth("Screen Border Blend Width", Range(0.01, 0.5)) = 0.15
+        _OuterEdgeBlendWidth("Outer Mesh Edge Blend Width", Range(0.001, 0.5)) = 0.15
         _MaxRings("Max Light Repeats (Rings)", Range(0.0, 20.0)) = 3.0
         
         // === RELATIVISTIC PHYSICS (shared) ===
@@ -101,6 +102,7 @@ Shader "DarkRelativity/Singularity"
             float _InnerCurvePower;
             float _TimeDilationShift;
             float _EdgeBlendWidth;
+            float _OuterEdgeBlendWidth;
             float _MaxRings;
             
             v2f vert(appdata v)
@@ -136,22 +138,22 @@ Shader "DarkRelativity/Singularity"
                 
                 float worldRs = i.worldRs * squeezeVal;
                 
-                float aspect = UNITY_MATRIX_P[1][1] / UNITY_MATRIX_P[0][0];
-                float2 aspectCorrect = float2(aspect, 1.0);
-                
-                float2 uv = i.grabPos.xy / i.grabPos.w;
-                float2 centerUv = i.screenCenter.xy / i.screenCenter.w;
-                float2 V = (uv - centerUv) * aspectCorrect;
-                float r = length(V);
-                
-                float F = UNITY_MATRIX_P[1][1] * 0.5;
-                float r_mesh_screen = (meshRadius / max(distToCenter, 0.0001)) * F;
-                float edgeFade = (distToCenter > meshRadius) ? saturate((r_mesh_screen - r) / (r_mesh_screen * 0.15 + 1e-5)) : 1.0;
-                
-                fixed4 finalColor = fixed4(0, 0, 0, edgeFade);
-                
                 float3 singularityDir = normalize(center - eyePos);
                 float cosTheta = dot(rayDir, singularityDir); 
+
+
+                
+                float edgeFade = 1.0;
+                if (distToCenter > meshRadius)
+                {
+                    float sinTheta_mesh = meshRadius / distToCenter;
+                    float cosTheta_mesh = sqrt(max(0.0, 1.0 - sinTheta_mesh * sinTheta_mesh));
+                    float blendRange = max(_OuterEdgeBlendWidth, 0.0001) * (1.0 - cosTheta_mesh);
+                    float t = saturate((cosTheta - cosTheta_mesh) / max(blendRange, 0.00001));
+                    edgeFade = t * t * (3.0 - 2.0 * t); // smoothstep
+                }
+                
+                fixed4 finalColor = fixed4(0, 0, 0, edgeFade);
                 
                 float theta_H = i.theta_H * squeezeVal;
                 float cosTheta_H = cos(theta_H);
@@ -211,8 +213,9 @@ Shader "DarkRelativity/Singularity"
                         float sinTheta_mesh = meshRadius / distToCenter;
                         float cosTheta_mesh = sqrt(max(0.0, 1.0 - sinTheta_mesh * sinTheta_mesh));
                         float theta_mesh = acos(clamp(cosTheta_mesh, -1.0, 1.0));
-                        // Fade from 1.0 at center to 0.0 at mesh edge (last 30% of radius)
-                        meshBlend = saturate((theta_mesh - theta) / max(theta_mesh * 0.3, 0.0001));
+                        // Fade from 1.0 at center to 0.0 at mesh edge (last 40% of radius, smoothstep)
+                        float t_blend = saturate((theta_mesh - theta) / max(theta_mesh * 0.4, 0.0001));
+                        meshBlend = t_blend * t_blend * (3.0 - 2.0 * t_blend);
                     }
                     
                     // Scale deflection by meshBlend; at mesh edge deflection=0 = no distortion
@@ -225,7 +228,13 @@ Shader "DarkRelativity/Singularity"
                         // UniverseID = 0.0 (Event Horizon) - Must be pure black
                         return fixed4(0, 0, 0, edgeFade);
                     }
-                    else if (universeId < 0.75)
+                    
+                    // Smoothly blend between Universe A and Universe B for wormholes
+                    float t_blend = saturate((universeId - (0.75 - _EdgeBlendWidth)) / max(2.0 * _EdgeBlendWidth, 0.0001));
+                    insideFactor = t_blend * t_blend * (3.0 - 2.0 * t_blend);
+                    
+                    col_Outside = half3(0,0,0);
+                    if (insideFactor < 0.99)
                     {
                         // UniverseID = 0.5 (Universe A, Escaped/Bounced)
                         // R channel stores NET DEFLECTION (0 = no bending at mesh edge)
@@ -258,7 +267,7 @@ Shader "DarkRelativity/Singularity"
                         
                         // Rotational Doppler
                         doppler = GetUnifiedDoppler(rayDir, singularityDir, perpendicular, distToCenter, worldRs);
-                        finalColor.rgb = ApplyBackgroundDoppler(col_Outside, doppler);
+                        col_Outside = ApplyBackgroundDoppler(col_Outside, doppler);
                         
                         // Apply Schwarzschild Event Horizon Fringe on the outside of the black hole
                         if (_FringeWidth > 0.0 && theta_Lensed < fringeOutTheta)
@@ -266,10 +275,12 @@ Shader "DarkRelativity/Singularity"
                             float fringeInTheta = theta_H;
                             half fringeFactor = (half)(smoothstep(fringeOutTheta, fringeInTheta, theta_Lensed) * edgeFade);
                             half beaming = (half)pow(max(doppler, 0.0001), 3.0);
-                            finalColor.rgb *= (1.0 + fringeFactor * _FringeStrength * beaming);
+                            col_Outside *= (1.0 + fringeFactor * _FringeStrength * beaming);
                         }
                     }
-                    else
+                    
+                    col_Inside = half3(0,0,0);
+                    if (insideFactor > 0.01)
                     {
                         // UniverseID = 1 (Universe B, Crossed Throat)
                         float theta_Lensed = totalPhi;
@@ -277,12 +288,17 @@ Shader "DarkRelativity/Singularity"
                         
                         half4 skyColor = texCUBElod(_WormholeSkybox, float4(ray_Lensed, 0.0));
                         col_Inside = DecodeHDR(skyColor, _WormholeSkybox_HDR) * _SkyboxBrightness;
-                        
-                        // Wormhole Time Dilation Doppler: peaks at the center (theta=0) and falls off to the edge (theta_H)
-                        float dilationFalloff = pow(saturate(1.0 - theta / max(theta_H, 0.0001)), 2.0);
-                        float dopplerFactor = exp(_TimeDilationShift * dilationFalloff);
-                        finalColor.rgb = ApplyBackgroundDoppler(col_Inside, dopplerFactor);
                     }
+                    
+                    finalColor.rgb = lerp(col_Outside, col_Inside, insideFactor);
+                    
+                    // Unified Time Dilation Doppler Shift for Wormholes
+                    #if defined(_ANALYTICMETRIC_WORMHOLE)
+                        float falloff = (universeId >= 0.75) ? ((1.0 - universeId) / 0.25) : ((universeId - 0.5) / 0.25);
+                        float dilationFalloff = pow(saturate(falloff), 4.0);
+                        float dopplerFactor = exp(_TimeDilationShift * dilationFalloff);
+                        finalColor.rgb = ApplyBackgroundDoppler(finalColor.rgb, dopplerFactor);
+                    #endif
                     
                 #else
                 
@@ -381,7 +397,7 @@ Shader "DarkRelativity/Singularity"
                     float theta_Lensed = theta - theta_H * distFactor;
                     float3 ray_Lensed = singularityDir * cos(theta_Lensed) + perpendicular * sin(theta_Lensed);
                     
-                    if (distToCenter <= meshRadius)
+                    if (distToCenter < worldRs)
                     {
 #ifdef USE_MANUAL_PROBE
                         col_Outside = texCUBElod(_ManualEnvironmentMap, float4(ray_Lensed, 0.0)).rgb;
@@ -419,8 +435,10 @@ Shader "DarkRelativity/Singularity"
                     insideFactor = 1.0 - smoothstep(theta_H - _EdgeBlendWidth, theta_H + _EdgeBlendWidth, theta);
                     finalColor.rgb = lerp(col_Outside, col_Inside, insideFactor);
                     
-                    // Wormhole Time Dilation Doppler: peaks at the center (theta=0) and falls off to the edge (theta_H)
-                    float dilationFalloff = pow(saturate(1.0 - theta / max(theta_H, 0.0001)), 2.0);
+                    // Unified Time Dilation Doppler Shift
+                    // The shift is localized to the event horizon (theta == theta_H) and decays away from it.
+                    float falloff = (theta <= theta_H) ? (theta / max(theta_H, 0.0001)) : (theta_H / max(theta, 0.0001));
+                    float dilationFalloff = pow(saturate(falloff), 4.0);
                     float dopplerFactor = exp(_TimeDilationShift * dilationFalloff);
                     finalColor.rgb = ApplyBackgroundDoppler(finalColor.rgb, dopplerFactor);
                 #endif // _ANALYTICMETRIC_WORMHOLE

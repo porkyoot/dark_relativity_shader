@@ -115,7 +115,7 @@ Material:
     - _HorizonLensingLimit: 0.8483
     - _InnerCurvePower: 3
     - _InnerRefraction: 1
-    - _LUTMaxDistance: 50
+    - _LUTMaxDistance: 100
     - _MaxDeflectionAngle: 3.77
     - _MaxPlayers: 80
     - _MaxRings: 3
@@ -125,6 +125,7 @@ Material:
     - _OtherPlayersDotSize: 1
     - _OtherSingularityRadius: 4.5000005
     - _OtherSingularityType: 2
+    - _OuterEdgeBlendWidth: 0.224
     - _Parallax: 0.02
     - _PlayerDotSize: 1
     - _RealRadius: 0.0814

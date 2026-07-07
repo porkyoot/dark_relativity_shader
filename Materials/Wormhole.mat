@@ -12,6 +12,7 @@ Material:
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
+  - USE_GEODESIC_LUT
   - _ANALYTICMETRIC_WORMHOLE
   m_InvalidKeywords:
   - _OTHERSINGULARITYTYPE_BLACKHOLE
@@ -97,20 +98,21 @@ Material:
     - _HorizonLensingLimit: 0.85
     - _InnerCurvePower: 2.59
     - _InnerRefraction: 0.24
-    - _LUTMaxDistance: 50
+    - _LUTMaxDistance: 1000
     - _MaxDeflectionAngle: 3.77
     - _MaxRings: 4
     - _Metallic: 0
     - _Mode: 0
     - _OcclusionStrength: 1
-    - _OtherSingularityRadius: 47.284985
+    - _OtherSingularityRadius: 42.29668
     - _OtherSingularityType: 1
+    - _OuterEdgeBlendWidth: 0.164
     - _Parallax: 0.02
     - _PhotonRingIntensity: 5
     - _PhotonRingWidth: 0.02
     - _RealRadius: 0.15
     - _RotationVelocity: 0
-    - _ScreenBorderBlendWidth: 0.114
+    - _ScreenBorderBlendWidth: 0.17
     - _SkyboxBrightness: 1
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
@@ -119,7 +121,7 @@ Material:
     - _ThroatRadius: 0.171
     - _TimeDilationShift: 1
     - _UVSec: 0
-    - _UseGeodesicLUT: 0
+    - _UseGeodesicLUT: 1
     - _UseManualProbe: 0
     - _ZWrite: 1
     m_Colors:

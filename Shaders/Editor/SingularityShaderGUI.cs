@@ -22,6 +22,7 @@ namespace DarkRelativity
             MaterialProperty distortionStrength = FindProperty("_DistortionStrength", properties);
             MaterialProperty distortionPower = FindProperty("_DistortionPower", properties);
             MaterialProperty screenBorderBlend = FindProperty("_ScreenBorderBlendWidth", properties);
+            MaterialProperty outerEdgeBlend = FindProperty("_OuterEdgeBlendWidth", properties);
             MaterialProperty maxRings = FindProperty("_MaxRings", properties);
             
             MaterialProperty speedOfLight = FindProperty("_SpeedOfLight", properties);
@@ -124,6 +125,7 @@ namespace DarkRelativity
             materialEditor.ShaderProperty(distortionStrength, "Lensing Strength");
             materialEditor.ShaderProperty(distortionPower, "Lensing Falloff");
             materialEditor.ShaderProperty(screenBorderBlend, "Screen Border Blend Width");
+            materialEditor.ShaderProperty(outerEdgeBlend, "Outer Mesh Edge Blend Width");
             materialEditor.ShaderProperty(maxRings, "Max Light Repeats (Rings)");
 
             // 3. Shared Relativistic Physics
