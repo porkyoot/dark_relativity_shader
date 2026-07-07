@@ -92,7 +92,7 @@ Material:
     - _AnalyticMetric: 0
     - _BakerMaxDistance: 50
     - _BakerMaxSteps: 10000
-    - _BakerResolution: 512
+    - _BakerResolution: 1024
     - _BakerStepSize: 0.005
     - _BakerThroatRadius: 0.15
     - _BaseTemperature: 6000

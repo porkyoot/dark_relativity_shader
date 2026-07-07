@@ -391,7 +391,7 @@ namespace DarkRelativity
                 {
                     float r_final = Mathf.Sqrt(b0 * b0 + l * l);
                     phi += GetAsymptoticCorrection(b, r_final);
-                    return new Vector2(phi, 1.0f); // Crossed to Universe B (1.0)
+                    return new Vector2(phi - Mathf.PI, 1.0f); // Crossed to Universe B (1.0)
                 }
             }
             
@@ -402,7 +402,7 @@ namespace DarkRelativity
             }
             else
             {
-                return new Vector2(phi, 1.0f); // Timeout in Universe B (1.0)
+                return new Vector2(phi - Mathf.PI, 1.0f); // Timeout in Universe B (1.0)
             }
         }
     }

@@ -79,7 +79,7 @@ Material:
     - _AnalyticMetric: 1
     - _BakerMaxDistance: 10
     - _BakerMaxSteps: 10000
-    - _BakerResolution: 512
+    - _BakerResolution: 1024
     - _BakerStepSize: 0.005
     - _BakerThroatRadius: 1
     - _BeamingIntensity: 0.3
@@ -98,7 +98,7 @@ Material:
     - _HorizonLensingLimit: 0.85
     - _InnerCurvePower: 2.59
     - _InnerRefraction: 0.24
-    - _LUTMaxDistance: 1000
+    - _LUTMaxDistance: 100
     - _MaxDeflectionAngle: 3.77
     - _MaxRings: 4
     - _Metallic: 0

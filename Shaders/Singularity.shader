@@ -241,8 +241,11 @@ Shader "DarkRelativity/Singularity"
                     }
                     
                     // Smoothly blend between Universe A and Universe B for wormholes
-                    float t_blend = saturate((universeId - (0.75 - _EdgeBlendWidth)) / max(2.0 * _EdgeBlendWidth, 0.0001));
-                    insideFactor = t_blend * t_blend * (3.0 - 2.0 * t_blend);
+                    #if defined(_ANALYTICMETRIC_WORMHOLE)
+                    insideFactor = 1.0 - smoothstep(theta_H - _EdgeBlendWidth, theta_H + _EdgeBlendWidth, theta);
+                    #else
+                    insideFactor = 0.0;
+                    #endif
                     
                     col_Outside = half3(0,0,0);
                     if (insideFactor < 0.99)
