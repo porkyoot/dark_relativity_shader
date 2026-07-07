@@ -230,7 +230,7 @@ Shader "DarkRelativity/Singularity"
                     // At mesh edge, force Universe A (no throat crossing at the periphery, value 0.5)
                     universeId = (meshBlend < 0.01) ? 0.5 : universeId;
                     
-                    if (universeId < 0.25) 
+                    if (universeId < 0.45) 
                     {
                         // UniverseID = 0.0 (Event Horizon) - Must be pure black
                         return fixed4(0, 0, 0, edgeFade);

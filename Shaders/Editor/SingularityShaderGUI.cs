@@ -338,16 +338,18 @@ namespace DarkRelativity
                 
                 totalPhi += dphi;
                 
+                if (float.IsNaN(u) || float.IsInfinity(u)) return new Vector2(totalPhi, 0.0f); // Singularity/numerical instability
                 if (u > 1.0f / Rs) return new Vector2(totalPhi, 0.0f); // Event Horizon (0.0)
                 if (u < 1.0f / maxDistance)
                 {
                     totalPhi += GetAsymptoticCorrection(b, 1.0f / u);
-                    break;
+                    float flatSpacePhi_esc = Mathf.PI - theta0;
+                    return new Vector2(totalPhi - flatSpacePhi_esc, 0.5f); // Escaped to Universe A (0.5)
                 }
             }
             
-            float flatSpacePhi = Mathf.PI - theta0;
-            return new Vector2(totalPhi - flatSpacePhi, 0.5f); // Escaped to Universe A (0.5)
+            // If we exceeded maxSteps without escaping, treat as Event Horizon (0.0)
+            return new Vector2(totalPhi, 0.0f);
         }
 
         private Vector2 ComputeEllisWormholeDeflection(float r0, float theta0, float b0, float maxDistance, int maxSteps, float stepSize)
