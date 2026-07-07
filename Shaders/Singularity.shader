@@ -242,7 +242,8 @@ Shader "DarkRelativity/Singularity"
                         float theta_Lensed = theta - deflection;
                         float3 ray_Lensed = singularityDir * cos(theta_Lensed) + perpendicular * sin(theta_Lensed);
                         
-                        float3 proj_Lensed = eyePos + ray_Lensed * distToCenter;
+                        float projDist = (distToCenter <= meshRadius) ? (meshRadius * 5.0) : distToCenter;
+                        float3 proj_Lensed = eyePos + ray_Lensed * projDist;
                         float4 clip_Lensed = UnityWorldToClipPos(proj_Lensed);
                         float2 uv_Lensed = ComputeGrabScreenPos(clip_Lensed).xy / max(clip_Lensed.w, 0.0001);
                         
@@ -250,7 +251,7 @@ Shader "DarkRelativity/Singularity"
                         bool inBounds = all(uv_Lensed > 0.0) && all(uv_Lensed < 1.0) && (clip_Lensed.w > 0.0);
                         float2 distToEdge = min(uv_Lensed, 1.0 - uv_Lensed);
                         float edgeDist = min(distToEdge.x, distToEdge.y);
-                        float blend = (distToCenter <= meshRadius) ? 0.0 : (inBounds ? smoothstep(0.0, blendW, edgeDist) : 0.0);
+                        float blend = inBounds ? smoothstep(0.0, blendW, edgeDist) : 0.0;
                         
                         half3 grabCol = UNITY_SAMPLE_SCREENSPACE_TEXTURE(_DarkRelativityGrab, uv_Lensed).rgb;
                         
@@ -331,28 +332,21 @@ Shader "DarkRelativity/Singularity"
                         float theta_Lensed = theta - theta_H * distFactor;
                         float3 ray_Lensed = singularityDir * cos(theta_Lensed) + perpendicular * sin(theta_Lensed);
                         
-                        if (distToCenter <= meshRadius)
-                        {
-                            half4 probeColor = UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_Lensed, 0.0);
-                            col_Outside = DecodeHDR(probeColor, unity_SpecCube0_HDR);
-                        }
-                        else
-                        {
-                            float3 proj_Lensed = eyePos + ray_Lensed * distToCenter;
-                            float4 clip_Lensed = UnityWorldToClipPos(proj_Lensed);
-                            float2 uv_Lensed = ComputeGrabScreenPos(clip_Lensed).xy / max(clip_Lensed.w, 0.0001);
-                            
-                            float blendW = max(_ScreenBorderBlendWidth, 0.02);
-                            bool inBounds = all(uv_Lensed > 0.0) && all(uv_Lensed < 1.0) && (clip_Lensed.w > 0.0);
-                            float2 distToEdge = min(uv_Lensed, 1.0 - uv_Lensed);
-                            float edgeDist = min(distToEdge.x, distToEdge.y);
-                            float blend = inBounds ? smoothstep(0.0, blendW, edgeDist) : 0.0;
-                            
-                            half3 grabCol = UNITY_SAMPLE_SCREENSPACE_TEXTURE(_DarkRelativityGrab, uv_Lensed).rgb;
-                            half3 probeCol = DecodeHDR(UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_Lensed, 0.0), unity_SpecCube0_HDR);
-                            
-                            col_Outside = lerp(probeCol, grabCol, blend);
-                        }
+                        float projDist = (distToCenter <= meshRadius) ? (meshRadius * 5.0) : distToCenter;
+                        float3 proj_Lensed = eyePos + ray_Lensed * projDist;
+                        float4 clip_Lensed = UnityWorldToClipPos(proj_Lensed);
+                        float2 uv_Lensed = ComputeGrabScreenPos(clip_Lensed).xy / max(clip_Lensed.w, 0.0001);
+                        
+                        float blendW = max(_ScreenBorderBlendWidth, 0.02);
+                        bool inBounds = all(uv_Lensed > 0.0) && all(uv_Lensed < 1.0) && (clip_Lensed.w > 0.0);
+                        float2 distToEdge = min(uv_Lensed, 1.0 - uv_Lensed);
+                        float edgeDist = min(distToEdge.x, distToEdge.y);
+                        float blend = inBounds ? smoothstep(0.0, blendW, edgeDist) : 0.0;
+                        
+                        half3 grabCol = UNITY_SAMPLE_SCREENSPACE_TEXTURE(_DarkRelativityGrab, uv_Lensed).rgb;
+                        half3 probeCol = DecodeHDR(UNITY_SAMPLE_TEXCUBE_LOD(unity_SpecCube0, ray_Lensed, 0.0), unity_SpecCube0_HDR);
+                        
+                        col_Outside = lerp(probeCol, grabCol, blend);
                         
                         col_Outside = CheckOtherSingularity(col_Outside, eyePos, ray_Lensed, _OtherSingularityPos, _OtherSingularityRadius, _OtherSingularityType, _WormholeSkybox, _WormholeSkybox_HDR, _SkyboxBrightness);
                         
@@ -408,7 +402,8 @@ Shader "DarkRelativity/Singularity"
                     }
                     else
                     {
-                        float3 proj_Lensed = eyePos + ray_Lensed * distToCenter;
+                        float projDist = (distToCenter <= meshRadius) ? (meshRadius * 5.0) : distToCenter;
+                        float3 proj_Lensed = eyePos + ray_Lensed * projDist;
                         float4 clip_Lensed = UnityWorldToClipPos(proj_Lensed);
                         float2 uv_Lensed = ComputeGrabScreenPos(clip_Lensed).xy / max(clip_Lensed.w, 0.0001);
                         
