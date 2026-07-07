@@ -179,7 +179,11 @@ Shader "DarkRelativity/Singularity (Quest)"
                 
                 #ifdef USE_GEODESIC_LUT
                 
+                    #if defined(_ANALYTICMETRIC_WORMHOLE)
+                    bool useLut = true; // Wormhole LUT is valid at u=0 (throat edge) when inside
+                    #else
                     bool useLut = (distToCenter >= worldRs);
+                    #endif
                     float r_norm = (distToCenter / max(worldRs, 0.0001) - 1.0) / max(_LUTMaxDistance - 1.0, 0.0001);
                     float u = sqrt(saturate(r_norm));
                     float v = saturate(theta / 3.1415926535);
